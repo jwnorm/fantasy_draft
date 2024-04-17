@@ -23,7 +23,7 @@ This report will build on the previous analysis that established a base optimal 
 Here are broad areas where we will investigate changes:
 
 * Projection system
-* Punting a category
+* Punting categories
 * Draft value of players
 * Starting draft position
 * Strict vs relaxed goal bounds
@@ -64,7 +64,7 @@ function solve_mip(targets::OrderedDict{String, Real},
 				   positions::OrderedDict{String, Int64},
 				   strict_goal::Bool=true;
 				   projections::String="batx_atc", 
-				   draft_position::String="ADP",
+				   draft_value::String="ADP",
 				   start_position::Int64=12,
 				   print::Bool=true, 
 				   export_arrays::Bool=false)
@@ -113,10 +113,22 @@ function solve_mip(targets::OrderedDict{String, Real},
 	@constraint(model, round_max[j in 1:m], sum(x[:, j]) == 1)
 	
 	@constraint(model, player_max[i in df.player], sum(x[i, :]) <= 1)
-	
-	@constraint(model, adp_odd_max[j in 1:2:m], sum(df[i, draft_position] * x[df.player[i], j] for i=1:n) >= teams * (j - 1) + start_position)
-	
-	@constraint(model, adp_even_max[j in 2:2:m], sum(df[i, draft_position] * x[df.player[i], j] for i=1:n) >= teams * (j - 2) + start_position + 1)
+
+	if start_position == 1
+		@constraint(model, adp_odd_max[j in 1:2:m], sum(df[i, draft_value] * x[df.player[i], j] for i=1:n) >= teams * (j - 1) + start_position)
+		
+		@constraint(model, adp_even_max[j in 2:2:m], sum(df[i, draft_value] * x[df.player[i], j] for i=1:n) >= teams * j)
+		
+	elseif start_position == 6 
+		@constraint(model, adp_odd_max[j in 1:2:m], sum(df[i, draft_value] * x[df.player[i], j] for i=1:n) >= teams * (j - 1) + start_position)
+
+		@constraint(model, adp_even_max[j in 2:2:m], sum(df[i, draft_value] * x[df.player[i], j] for i=1:n) >= teams * (j - 1) + start_position + 1)
+
+	elseif start_position == 12
+		@constraint(model, adp_odd_max[j in 1:2:m], sum(df[i, draft_value] * x[df.player[i], j] for i=1:n) >= teams * (j - 1) + start_position)
+		
+		@constraint(model, adp_even_max[j in 2:2:m], sum(df[i, draft_value] * x[df.player[i], j] for i=1:n) >= teams * (j - 2) + start_position + 1)
+	end
 
 	@constraint(model, pos_min[p in keys(position_min)], sum(df[i, p] * x[df.player[i], j] for i=1:n, j=1:m) >= position_min[p])
 
@@ -207,6 +219,33 @@ Since the objective function and related expressions are heavily dependent on th
 
 # ╔═╡ ef26e745-741f-4d93-a5df-e9cf84966cfb
 projections = ["batx_atc", "zips", "steamer", "atc", "bat"]
+
+# ╔═╡ 399558ee-ae0e-4b40-be47-2d4332f2e321
+# ╠═╡ disabled = true
+#=╠═╡
+begin
+	roster_df = DataFrame()
+	
+	stats_df = DataFrame(Category = [k for k in keys(targets)],
+						 Target=[targets[k] for k in keys(targets)])
+
+	# convert ratio targets from sum to avg
+	stats_df[5, :Target] = stats_df[5, :Target] / 13
+	stats_df[[9, 10], :Target] = stats_df[[9, 10], :Target] / 10
+	
+	pos_df = DataFrame(Position = [p for p in keys(position_min)],
+		Target=[position_min[p] for p in keys(position_min)])
+	
+	for system in projections
+		roster, stats, pos = solve_mip(targets, position_min; projections=system, print=false, export_arrays=true)
+
+		roster_df[:, system] = roster
+		stats_df[:, system] = stats
+		pos_df[:, system] = pos
+	end
+
+end
+  ╠═╡ =#
 
 # ╔═╡ 095f7ad1-8e74-4f2c-954a-7db24133680a
 md"""
@@ -334,21 +373,6 @@ begin
 						"Punt Solds & Wins" => punt_solds_wins)
 end	
 
-# ╔═╡ 53ab34aa-6fa9-4a76-a5c9-85d50be9b7ce
-roster_df
-
-# ╔═╡ 13b9cec6-0364-4de7-970e-3b90e5783437
-stats_df
-
-# ╔═╡ 24a737a7-9f4d-4cef-8807-8009c37d175f
-roster_df
-
-# ╔═╡ 3abfc95d-b0bd-45a9-b417-97702432f128
-stats_df
-
-# ╔═╡ 06c5ec40-d6bd-474a-bd4e-b0decc07e11a
-roster_df
-
 # ╔═╡ d6605196-5a51-4d00-b59f-5f0e497853a4
 md"""
 By punting SOLDs, all relivers on the roster are replaced with additional starters or position players. Two additional position players we swapped in for pitchers, while Camilo Doval anbd Evan Phillips were replaced with Bobby Miller and Logan Gilbert, respectively. Otherwise, the rosters look remarkably similar.
@@ -361,9 +385,6 @@ By choosing to punt SOLDs and wins, the roster skews towards hitters. The first 
 
 Now let's see how the team stat totals compare among the different scenarios:
 """
-
-# ╔═╡ f0e2fa8f-de72-4170-b65b-a1ce02c38051
-stats_df
 
 # ╔═╡ 2896b638-5ba7-4788-bc48-5f7573aa7b3d
 md"""
@@ -379,11 +400,92 @@ Based on the above, it seems like punting SOLDs is the only viable strategy if y
 # ╔═╡ b7deb98a-d2cc-49cc-9598-3b3c29d51301
 md"""
 ## Starting Draft Position
+
+Conventional wisdom would suggest that having the first selection in a fantasy draft would result in the best (theoretical) team among others in the league. This is usually because there is a sharp skills dropoff after the first few picks. There is a tradeoff though: the snake format of the draft means that the person with the first overall selection will then have the *last* pick in the second round. In the case of a 12-team league, this means they will have picks 1 and 24. Conversely, the person with the last pick in the first round will have the *first* pick of the second round. In a 12-team league, this means they would own picks 12 and 13. The question is: which position is more optimal?
+
+The base model assumes a 12-team league and that the model is drafting in the last spot of the first round. This is because this is where I drafted earlier this season. We will rerun the base case assuming I instead had the first and sixth pick to see how this affects the final roster and the overall stat totals.
+"""
+
+# ╔═╡ 65c53df3-2b0e-4630-ba90-361482436101
+md"""
+In very rare cases, there is a consensus #1 pick. Coming into the 2024 season, Ronald Acuna Jr. was that player. It comes as no surpise that the *Pick 1* model selects him first overall. He is coming off a a 50 home run, 70 stolen base season! Just his contribution to the team totals will be a massive. Beyond drafting a hitter in the first round, the *Pick 1* model only slightly deviates from the strategy followed by the *Pick 12* model (the base case). Both models target starting pitching and then relief pitching in the first several rounds, and many of the same players make up both teams. Again, this tells me that these players are great values and should be targeted in my real life draft. There are several new players that essentially fill similar functions: Andres Munoz replaces Camilo Doval, Max Fried replaces Zack Wheeler, annd Shea Langaliers replaces Logan O'Hoppe.
+
+Looking at the *Pick 6* model, it again opts for a power-speed bat in Fernando Tatis Jr., a player with a similar ceiling to Acuna, but a lower floor. Actually, it makes more sense to compare this one to the *Pick 1* model since there are only **three** players on both rosters that differ. Three! This deserves taking a deeper dive into the differences (or similarities) among these players. 
+
+Starting with Tatis, as stated above, we should compare him directly to Acuna. Tatis is projected for 20 less steals, 20 less runs, and nearly 50 points less in OBP. Home runs and RBIs are projected to be nearly the same for both players. This suggests that the difference in these categories will need to be recouped with the other two players. Looking at the catcher slot, the *Pick 6* model opts for Henry Davis over Shea Langaliers. Davis offers 6 more stolen bases, 8 more runs, and over 60 points of OBP. The tracks with our hypothesis so far. The last player swap that the *Pick 6* model makes is Ryan McMahon for Jack Suwinski. McMahon provides 7 more runs but 2 less stolen bases, with a slightly better OBP than Suwinski. To account for the Acuna effect, the *Pick 6* model selects Davis and McMahon to close the gap in runs by 15 and making up for OBP almost entirely. It does not seem like it can entirely make up for the stolen bases Acuna is projected for, leaving a gap of 16 between the two models.
+
+We can look at this more closely by examining the team category totals for each scenario.
+"""
+
+# ╔═╡ da975966-af09-42fe-82b1-b147c9d2a0b0
+md"""
+My reasoning for selecting pick 12 in my real-life draft was that I would rather have two fringe first rounders than have the first overall selection and then have to wait until almost round 3 to have my second pick. It was a decision very much based in intuition, and this data does not necssarily support it or reject it. 
+
+There are 55 more steals and 35 more runs projected if I would have chose the first pick, but otherwise? Very similar. In fact, the *Pick 12* model has over 50 more strikeouts and 12 more SOLDs. This feels like a wash.
+
+As we might have guessed, the *Pick 1* and the *Pick 6* model have almost the same projected end of season statistics. The only glaring exception is steals, which is 16 stolen bases lower because it does not have Acuna. 
+
+Overall, it is not clear what the best strategy is based off of starting draft position. Besides having Acuna, the rosters are built very similarly and have more or less the same projected stats. The snake-like nature of the draft is meant to level the playing field amongst all teams, and despite my prediction, it appears to do a reasonably good job at it.
 """
 
 # ╔═╡ 456630b8-594d-40b4-b1c9-54cfe459fb0e
 md"""
-## Lax Goal
+## Relax Goal Bounds
+
+For our final scenario analysis, we will remove the requirement that each target must be met. This should allow certain categories to greatly exceed what is needed to win the fantasy league at the expense of others. Overall, it should be a very unbalanced team.
+"""
+
+# ╔═╡ 01c05948-6397-4565-b714-69193c0ac5bb
+goal_bounds = OrderedDict("Strict" => true, "Relaxed" => false)
+
+# ╔═╡ 53ab34aa-6fa9-4a76-a5c9-85d50be9b7ce
+roster_df
+
+# ╔═╡ 13b9cec6-0364-4de7-970e-3b90e5783437
+stats_df
+
+# ╔═╡ 24a737a7-9f4d-4cef-8807-8009c37d175f
+roster_df
+
+# ╔═╡ 3abfc95d-b0bd-45a9-b417-97702432f128
+stats_df
+
+# ╔═╡ 06c5ec40-d6bd-474a-bd4e-b0decc07e11a
+roster_df
+
+# ╔═╡ f0e2fa8f-de72-4170-b65b-a1ce02c38051
+stats_df
+
+# ╔═╡ d744dd56-31fa-4469-8804-d73ae9e03f01
+roster_df
+
+# ╔═╡ 210e96bc-b716-4c74-880c-88839a47eccb
+stats_df
+
+# ╔═╡ ba991ed7-59f8-48d7-8c76-0e48d1ec9489
+roster_df
+
+# ╔═╡ 6e53fa35-0d5e-42cd-919e-03d6a894dd66
+md"""
+The strategy that the model chooses is very interesting: do not draft any starting pitchers. This is not surpising given the fact that wins are difficult to come by, as we have not seen *any* permutation of this model have a win total above the 100 win threshold. 
+
+The *Relaxed* model opts to take two premium bats in the first couple rounds: Aaron Judge and Jose Ramirez. Both are balanced hitters that have a good amount of pop. Ramirez projects for about 30 steals as well. Since starters are not valued here,  the model takes two of the best relievers in the whole draft: Edwin Diaz and Josh Hader. These guys have big strikeout upside and a proven track record of success. The second half of the draft looks remarkably similar to the *Strict* model though.
+
+Let's take a look at how this impacts our objectives:
+"""
+
+# ╔═╡ fbe92cf9-5233-4fee-9f4d-769a9476289f
+stats_df
+
+# ╔═╡ fd56a380-dfa7-4eab-a6cb-c8438eb2bdf9
+md"""
+All offensive categories are supercharged, which is heavily driven by Judge and Ramirez. As expected, not drafting any starters is tentamount to punting wins and strikeouts most weeks. Both categories are high enough that it is possible to steal those two categories in some weeks. By having a pitching staff built entirely of relievers, the pitching ratios are elite, so this should be a strong advantage as well.
+
+The *Relaxed* model is less balanced, but not to the extreme that I anticipated. The roster is very strong in eight categories, which most weeks should be enough to win the matchup. I do think this fantasy team could make the playoffs, the question becomes how deep they could go. You are essentially giving the other team two points, so would really need to have the advantage in all others to have a chance.
+
+As an aside, I do wonder what effect drafting the *Relaxed* model's roster would have on the league as a whole. You would essentially be hording all of the top end relief pitchers, which would leave others with little alternatives. In the real world, other teams would be forced to adjust their draft strategy live to deal with the substantial changes you are making. Put another way, it is unlikely you would actually be able to draft all of these relievers. Generally, when one reliever goes early, it prompts someone soon after to select a relief pitcher as well. This can snowball into a run on relief pitchers due to the perception that they might be gone sooner than normal. By the time it is your turn to make another pick, some of the guys you wanted might not be there anymore.
+
+> **Note:** In my real draft, I actually selected several players that showed up in the *Relaxed* model: Jose Ramirez, Edwin Diaz, Cedric Mullins, and Daulton Varsho. My strategy was actually to soft punt saves and holds. My reasoning was that a lot of SOLDs are actually earned from waiver wire pickups anyway, so why waste premium draft capital on them?
 """
 
 # ╔═╡ 1e7c8f62-78ce-4e91-b634-889bd9e869ac
@@ -400,7 +502,7 @@ begin
 	stats_df[[9, 10], :Target] = stats_df[[9, 10], :Target] / 10
 	
 	for v in draft_value
-		roster, stats, pos = solve_mip(targets, position_min; draft_position=v, print=false, export_arrays=true)
+		roster, stats, pos = solve_mip(targets, position_min; draft_value=v, print=false, export_arrays=true)
 
 		roster_df[:, v] = roster
 		stats_df[:, v] = stats
@@ -410,6 +512,8 @@ end
   ╠═╡ =#
 
 # ╔═╡ a94c2b31-5193-4c89-b296-6b359708fff4
+# ╠═╡ disabled = true
+#=╠═╡
 begin
 	roster_df = DataFrame()
 	
@@ -428,8 +532,29 @@ begin
 	end
 
 end
+  ╠═╡ =#
 
-# ╔═╡ 399558ee-ae0e-4b40-be47-2d4332f2e321
+# ╔═╡ 71a17300-fe89-40d1-96a3-2e1677091b77
+begin
+	roster_df = DataFrame()
+	
+	stats_df = DataFrame(Category = [k for k in keys(targets)],
+						 Target=[targets[k] for k in keys(targets)])
+
+	# convert ratio targets from sum to avg
+	stats_df[5, :Target] = stats_df[5, :Target] / 13
+	stats_df[[9, 10], :Target] = stats_df[[9, 10], :Target] / 10
+	
+	for g in keys(goal_bounds)
+		roster, stats, pos = solve_mip(targets, position_min, goal_bounds[g]; print=false, export_arrays=true)
+
+		roster_df[:, g] = roster
+		stats_df[:, g] = stats
+	end
+
+end
+
+# ╔═╡ e20deea0-20a2-432a-af92-d3d41c405ee0
 # ╠═╡ disabled = true
 #=╠═╡
 begin
@@ -442,15 +567,11 @@ begin
 	stats_df[5, :Target] = stats_df[5, :Target] / 13
 	stats_df[[9, 10], :Target] = stats_df[[9, 10], :Target] / 10
 	
-	pos_df = DataFrame(Position = [p for p in keys(position_min)],
-		Target=[position_min[p] for p in keys(position_min)])
-	
-	for system in projections
-		roster, stats, pos = solve_mip(targets, position_min; projections=system, print=false, export_arrays=true)
+	for p in [1, 6, 12]
+		roster, stats, pos = solve_mip(targets, position_min; start_position=p, print=false, export_arrays=true)
 
-		roster_df[:, system] = roster
-		stats_df[:, system] = stats
-		pos_df[:, system] = pos
+		roster_df[:, "Pick $p"] = roster
+		stats_df[:, "Pick $p"] = stats
 	end
 
 end
@@ -1024,14 +1145,25 @@ version = "17.4.0+2"
 # ╟─e3202458-11ae-40a0-90ce-21d1720b536d
 # ╠═3abfc95d-b0bd-45a9-b417-97702432f128
 # ╟─107f7761-75f5-4928-b47a-051e82a45e1d
-# ╟─a66596b3-f34f-4577-b875-321b70ad1ff1
+# ╠═a66596b3-f34f-4577-b875-321b70ad1ff1
 # ╠═eb9d5883-ae90-4e68-8025-2d2a365d452c
 # ╠═a94c2b31-5193-4c89-b296-6b359708fff4
 # ╠═06c5ec40-d6bd-474a-bd4e-b0decc07e11a
-# ╠═d6605196-5a51-4d00-b59f-5f0e497853a4
+# ╟─d6605196-5a51-4d00-b59f-5f0e497853a4
 # ╠═f0e2fa8f-de72-4170-b65b-a1ce02c38051
 # ╟─2896b638-5ba7-4788-bc48-5f7573aa7b3d
 # ╟─b7deb98a-d2cc-49cc-9598-3b3c29d51301
+# ╠═e20deea0-20a2-432a-af92-d3d41c405ee0
+# ╠═d744dd56-31fa-4469-8804-d73ae9e03f01
+# ╠═65c53df3-2b0e-4630-ba90-361482436101
+# ╠═210e96bc-b716-4c74-880c-88839a47eccb
+# ╟─da975966-af09-42fe-82b1-b147c9d2a0b0
 # ╟─456630b8-594d-40b4-b1c9-54cfe459fb0e
+# ╠═01c05948-6397-4565-b714-69193c0ac5bb
+# ╠═71a17300-fe89-40d1-96a3-2e1677091b77
+# ╠═ba991ed7-59f8-48d7-8c76-0e48d1ec9489
+# ╟─6e53fa35-0d5e-42cd-919e-03d6a894dd66
+# ╠═fbe92cf9-5233-4fee-9f4d-769a9476289f
+# ╟─fd56a380-dfa7-4eab-a6cb-c8438eb2bdf9
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
