@@ -31,6 +31,8 @@ Draft position and related data was obtained from the [**N**ational **F**antasy 
 
 Multiple scenario analyses will be performed to determine the effect of various inputs used on the results of the model including:
 
-- Projection system
-- Starting draft position
+- Projection system utilized
+- Punting one or more categories
 - Proxy for player draft value
+- Starting draft position
+- Strict vs relaxed goal bounds

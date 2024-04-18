@@ -9,7 +9,7 @@ using JuMP, HiGHS, CSV, DataFrames, OrderedCollections
 
 # ╔═╡ 34aabfbf-46a7-48ed-8696-baab5a06d5b5
 md"""
-# Fantasy Baseball Draft
+# Fantasy Baseball Draft - Base Case
 **Jacob Norman**
 
 * Scenario: Base
@@ -21,7 +21,7 @@ md"""
 md"""
 ## Introduction
 
-This document is a walkthrough of a fantasy baseball draft optimization model. This is the final project for my ISE 501 course. Coincidentally, I have a fantasy baseball draft that is coming up, so I hope to use this model to actually influence my draft strategy.
+This document is a walkthrough of a fantasy baseball draft optimization model. This is the final project for my ISE501 course. Coincidentally, when I began this project I had a fantasy baseball draft that was coming up, so the intention was for this analysis to inform my actual draft strategy.
 
 Here are a few notes about the fantasy league:
 * 12 teams
@@ -32,23 +32,23 @@ Here are a few notes about the fantasy league:
 md"""
 ## Preprocessing
 
-Before we actually start to build the model, let's read in the data that this will be based on. The projections are courtesy of Fangraphs. The hitters are using *THE BAT X* projections, while pitchers projections are based off of *ATC*. 
+Before we actually start to build the model, let's read in the data that this will be based on. The projections are courtesy of [Fangraphs](https://www.fangraphs.com). The hitters are using *THE BAT X* projections, while pitchers projections are based off *ATC*. 
 
-I chose *THE BAT X* as my favored source of projections because they are leveraging Statcast data. These are process-oriented metrics and include: average launch angle, average exit velocity, and hard hit rate. In other words, these capture the hitter's approach to predict their futures outcomes, not just their past outcomes alone.
+I chose *THE BAT X* as my favored source of projections because they are leveraging Statcast data. These are process-oriented metrics that include, but are not limited to: average launch angle, average exit velocity, and hard hit rate. In other words, these capture the hitter's approach to predict their futures outcomes, not just their past outcomes alone.
 
 Normally, I would like the projections of both the hitters and the pitchers to be from the same source; however, *THE BAT X* only projects for hitters at present, so I opted to use the *ATC* projections for pitchers. *ATC* stands for **A**verage **T**otal **C**ost and, as its name suggests, it averages the projections of several different sources.
 
-The **A**verage **D**raft **P**osition (ADP) is sourced from NFBC Rotowire Online 12-team leagues for the month of March.
+**A**verage **D**raft **P**osition (ADP) and related information is sourced from [NFBC](https://nfc.shgn.com/baseball) Rotowire Online 12-team leagues for the month of March. In fact, I only pulled the players into the model if they were drafted during this time period.
 
 First, let's load the required packages:
 """
 
 # ╔═╡ 46e54092-e74c-4d2c-853a-59a0489667ba
 md"""
-The *HiGHS.jl* library is an open source solver that is great for mixed-integer LPs. This is exactly what I need, because I first wrote this model in GAMS, but ran into trouble with the limit on decision variables that came with the academic license.
+The `HiGHS.jl` library is an open source solver that is great for mixed-integer LPs. This is exactly what I need, because I first wrote this model in GAMS, but ran into trouble with the limit on decision variables that came with the academic license.
 
 
-Next, we will read in the dataframe:
+Next, we will read in the DataFrame:
 """
 
 # ╔═╡ 068cb0f0-1c0f-421d-8d56-5707be32e9dc
@@ -68,11 +68,11 @@ For hitters:
 For pitchers:
 * **W**ins (`W`)
 * **S**trike**O**uts (`SO`)
-* **S**aves plus **H**olds (`SOLD`)
+* **S**aves plus **HOLD**s (`SOLD`)
 * **E**arned **R**un **A**verage (`ERA`)
 * **W**alks + **H**its / **I**nnings **P**itched (`WHIP`)
 
-Right now, we do not have a field for `SOLD`, but we do have `SV` and `HLD`, so we will make that now:
+Right now, we do not have a field for `SOLD`s, but we do have `SV` and `HLD`, so we will make that now:
 """
 
 # ╔═╡ 01875dcf-f38a-407c-8691-f08952e29283
@@ -100,15 +100,15 @@ The two primary sets are as follows:
 
 # ╔═╡ d5dc21ba-f8f7-490f-91fa-fc549d2f9aec
 begin
-	n = length(df.player)
+	n = length(df[:, :player])
 	m = 25
 end
 
 # ╔═╡ efdfd4d2-596c-44d9-978b-4d2e541d35b5
 md"""
-I had to include the team the player currently belongs to as part of the player ID, since there were a few players that had the same first and last names, suich as Will Smith or Logan Allen. 
+I had to include the team the player currently belongs to as part of the player ID, since there were a few players that had the same first and last names, such as Will Smith or Logan Allen. 
 
-With that in mind, the are $n unique players and $m rounds in the draft.
+With that in mind, the are $n unique players and $m rounds in the draft. For mathematical formulations, we will just use the players index out of the $n for convenience.
 """
 
 # ╔═╡ 334c0497-e812-43ac-bbcc-63c3fa5c3b87
@@ -134,16 +134,16 @@ targets = OrderedDict("HR" => 275,
 			   		  "R" => 1000, 
 			   		  "RBI" => 1000, 
 			   		  "SB" => 200, 
-			   		  "OBP" => 0.35 * 13,
+			   		  "OBP" => 0.35 * 13,  # assuming 13 hitters
 			          "W" => 100, 
 				      "SOLD" => 75,
 			          "SO" => 1200,
-		              "WHIP" => 1.2 * 10,
+		              "WHIP" => 1.2 * 10,  # assuming 10 pitchers
 			          "ERA" => 3.7 * 10)
 
 # ╔═╡ 96b7d9be-0013-4f9d-a300-6e319789f7fe
 md"""
-> **Important Note:** While most of the categories are counting stats (can only take integer values), there are 3 measures that are ratios: OBP, WHIP, and ERA. To keep the model linear, I will look to maximize the sum and not the average as I would like. To accomplish this, I needed to approximate a target ratio for each stat, which meant I needed to guess the number of hitters and pitchers that will be on my roster. This is not a perfect solution, but it will keep everything linear.
+> **Important Note:** While most of the categories are counting stats (can only take integer values), there are three measures that are ratios: `OBP`, `WHIP`, and `ERA`. To keep the model linear, I will look to maximize the sum and not the average as I would like. To accomplish this, I needed to approximate a target ratio for each stat, which meant I needed to guess the number of hitters and pitchers that will be on my roster. This is not a perfect solution, but it will keep everything linear.
 """
 
 # ╔═╡ e243dd01-d94f-48ab-bf5a-a9077e62c2ba
@@ -160,7 +160,7 @@ weights = OrderedDict("HR" => 1,
 
 # ╔═╡ 24324454-e644-4a56-bdc1-2f8e64e8d03e
 md"""
-There are also roster considerations; I can't have a team composed entirely of one position. Since there are 25 rounds, I need 25 players on the roster; but only 18 of them can start at any one time (the remaining 7 players are on the bench). The numbers below are the minimum number of each position I need on my team.
+There are also roster considerations; I can't have a team composed entirely of one position. Since there are 25 rounds, I need 25 players on the roster; but only 18 of them can start at any one time (the remaining 7 players are on the bench, although this does not mean they never contribute). The numbers below are the minimum number of each position I need on my team.
 """
 
 # ╔═╡ dcf57186-b704-4a91-97d9-3a8b9d63711a
@@ -178,14 +178,14 @@ position_min = OrderedDict("C" => 1,
 md"""
 ## Decision Variables
 
-The decision the model needs to make is pretty simple: what player should I select in each round of the draft? In practice, this is a single variable with two indexes.
+The decision the model needs to make is pretty simple: what player should I select in each round of the draft? In practice, this is a single variable with two indexes, `i` and `j`.
 
 > **Important Note:** The decision variable is binary!
 """
 
 # ╔═╡ 4f6ceaac-e93e-480d-a37e-595e53f6cf83
 @variable(model,
-		  x[df.player, 1:m], 
+		  x[df[:, :player], 1:m], 
 		  Bin)
 
 # ╔═╡ 78530e8d-e32d-4154-b913-c9a8745e05ec
@@ -197,13 +197,13 @@ We need to build some expressions that relate to the objective function. There w
 $\frac{\sum_{i=1}^{n}\sum_{j=1}^{m}{c_{ik}x_{ij}}- target_{k}}
 {target_{k}},\ for\ k=1-10\ (category)$
 
-The subobjectives are formulated this way to normalize the scale of each statistical category.
+The subobjectives are formulated this way to normalize the scale of each statistical category, some are in the thousands and others can be less than 100.
 """
 
 # ╔═╡ 6e00d682-8c4e-4250-a6e5-d4383e7caae6
 @expression(model,
-			obj[k in keys(targets)], 
-			((sum(x[df.player[i], j] * df[i, k] for i=1:n, j=1:m) - targets[k]) / targets[k]))
+			obj[k ∈ keys(targets)], 
+			((sum(x[df[i, :player], j] * df[i, k] for i=1:n, j=1:m) - targets[k]) / targets[k]))
 
 # ╔═╡ e2b12d7d-df7e-4d9e-b095-705d486e5388
 md"""
@@ -213,11 +213,11 @@ With the above expression created, the objective function is fairly straightword
 
 $max \ z = \sum_{k=1}^{10}{w_{k} obj_{k}}$
 
-We defined the weights earlier, which are simply +1 for categories we seek to maximize, and -1 for those week seek to minimize.
+We defined the weights earlier, which are simply +1 for categories we seek to maximize and -1 for those week seek to minimize.
 """
 
 # ╔═╡ 258ffcba-e4f2-483f-8173-53e3051af4cd
-@objective(model, Max, sum(weights[k] * obj[k] for k in keys(targets)))
+@objective(model, Max, sum(weights[k] * obj[k] for k ∈ keys(targets)))
 
 # ╔═╡ 890d0a70-c6d8-41d2-95c8-dd2ee0d8b78f
 md"""
@@ -232,72 +232,81 @@ When written in algebraic form, the model only has a few constraints:
 
 Let's start with the *RoundMax* constraint. This ensures that exactly one player is selected in each round:
 
-$\sum_{i=1}^{n}{x_{ij}} = 1,\ for\ j=1-25$
+$\sum_{i=1}^{579}{x_{ij}} = 1,\ for\ j=1-25$
 """
 
 # ╔═╡ e2911ffd-d89b-4004-8749-b42d116ac841
 ## RoundMax
 @constraint(model, 
-			round_max[j in 1:m], 
+			round_max[j ∈ 1:m], 
 			sum(x[:, j]) == 1)
 
 # ╔═╡ 7cfdd204-5a2b-40fb-9381-d6b600edfe9e
 md"""
 Next, we will look at *PlayerMax*, which will make sure that a player is selected at most once in the entire draft. Otherwise, the model could just key on a statistical powerhouse like Ronald Acuna Jr. several times.
 
-$\sum_{i=j}^{m}{x_{ij}} ≤ 1,\ for\ i=1-500$
+$\sum_{j=1}^{25}{x_{ij}} ≤ 1,\ for\ i=1-579$
 """
 
 # ╔═╡ 1c11428a-748b-4438-8dca-0e6f684343ad
 ## PlayerMax
 @constraint(model, 
-			player_max[i in df.player], 
+			player_max[i ∈ df[:, :player]], 
 			sum(x[i, :]) <= 1)
 
 # ╔═╡ 255d8fd3-15a5-47d7-96d0-203cb0f4fc30
 md"""
 One challenge with this model is that we are attempting to apply deterministic methods to something that is inherently stochastic; we cannot know what players will be available during each round in the draft with certainty.
 
-To account for this, the *ADPOddMax* and *ADPEvenMax* constraints will ensure that no player is selected before their ADP. This is essentially a best guess as to when the player will be selected.
+To account for this, the *ADPOddMax* and *ADPEvenMax* constraints will ensure that no player is selected before their `ADP`. This is essentially a best guess as to when the player will be selected.
 
 Since this is a snake draft, there are two different patterns. For odd rounds:
 
-$\sum_{i=1}^{n}{ADP_{i}x_{ij}} ≥ teams(j-1) + start\_position,\ for\ j=1,3,5,...,25$
+$\sum_{i=1}^{579}{ADP_{i}x_{ij}} ≥ teams(j-1) + start\_position,\ for\ j=1,3,5,...,25$
 """
 
 # ╔═╡ f2e2cd8e-59c8-452d-bf12-0e6181e6c2c5
 # ADPOddMax
-@constraint(model, adp_odd_max[j in 1:2:m], sum(df.ADP[i] * x[df.player[i], j] for i=1:n) >= teams * (j - 1) + start_position)
+@constraint(model, 
+			adp_odd_max[j ∈ 1:2:m], 
+			sum(df[i, :ADP] * x[df[i, :player], j] 
+			for i=1:n) >= teams * (j - 1) + start_position)
 
 # ╔═╡ 4b00b875-9516-46de-8d2e-22bc8733334d
 md"""
 For even rounds in the draft:
 
-$\sum_{i=1}^{n}{ADP_{i}x_{ij}} ≥ teams(j-2) + start\_position + 1,\ for\ j=2,4,6,...,24$
+$\sum_{i=1}^{579}{ADP_{i}x_{ij}} ≥ teams(j-2) + start\_position + 1,\ for\ j=2,4,6,...,24$
 """
 
 # ╔═╡ 3b3ef5fa-b3e8-4710-9fed-c60aa991f98a
 # ADPEvenMax
-@constraint(model, adp_even_max[j in 2:2:m], sum(df.ADP[i] * x[df.player[i], j] for i=1:n) >= teams * (j - 2) + start_position + 1)
+@constraint(model, 
+			adp_even_max[j ∈ 2:2:m], 
+			sum(df[i, :ADP] * x[df[i, :player], j]
+			for i=1:n) >= teams * (j - 2) + start_position + 1)
 
 # ╔═╡ 952b73e1-d052-4188-afd4-896bb754ec4c
 md"""
 A key part of team construction is making sure you have a sufficient number of players eligible to play all positions. The constraint *PositionMin* accomplishes this:
 
-$\sum_{i=1}^{n}\sum_{j=1}^{m}{Pos_{ip}x_{ij}} ≥ MinPos_{p},\ for\ p=1-9$
+$\sum_{i=1}^{579}\sum_{j=1}^{25}{Pos_{ip}x_{ij}} ≥ MinPos_{p},\ for\ p=C,\ 1B,\ 2B,\ 3B,\ SS,\ INF,\ OF,\ UT,\ P$
 """
 
 # ╔═╡ c0b8e207-3b0d-4265-93b4-dbc607ad9f9b
 # PositionMin
-@constraint(model, pos_m[p in keys(position_min)], sum(df[i, p] * x[df.player[i], j] for i=1:n, j=1:m) >= position_min[p])
+@constraint(model, 
+			pos_m[p ∈ keys(position_min)], 
+			sum(df[i, p] * x[df[i, :player], j] 
+			for i=1:n, j=1:m) >= position_min[p])
 
 # ╔═╡ f189408f-5231-47e5-9746-5b2cb3ad0e50
 md"""
-Lastly, we need to add non-negativity constraints for the categories we want to maximize and non-positivity constraints for those we want to minimize. We already did this for $x_{ij}$ since it is a binary variable, but we need to still do this for $obj_{k}$.
+Lastly, we need to add non-negativity constraints for the categories we want to maximize and non-positivity constraints for those we want to minimize. The bounds of $x_{ij}$ are already accounted for since we defined it as a binary variable, but we need to still do this for $obj_{k}$.
 
-We *could* keep these values as free variables, but I would like to at least hit the target on all of the categories. Winning categories is binary, so we just need top do enough to win and not much more. Otherwise, other categories could be compromised.
+We *could* keep these values as free variables, but I would like to at least hit the target on all of the categories. The reason being that winning categories is binary, so we just need to do enough to win and not much more. Otherwise, other categories could be compromised.
 
-As a reminder, we could like WHIP and ERA to be as small as possible, and would like to maximize all other stats.
+As a reminder, we could like `WHIP` and `ERA` to be as small as possible, and would like to maximize all other stats.
 """
 
 # ╔═╡ 6e59a964-ea5c-4159-b4d2-99d514ab033f
@@ -306,10 +315,20 @@ begin
 	negative_categories = ["WHIP", "ERA"]
 end
 
+# ╔═╡ 0560224e-d385-430c-807e-4131b91fcd1c
+md"""
+$obj_{k} ≥ 0,\ for\ k=HR,\ R,\ RBI,\ SB,\ OBP,\ W,\ SOLD,\ SO$
+"""
+
 # ╔═╡ 1d96d749-ff96-49aa-89af-372ff61d1504
 @constraint(model,
 			positive_goal[k in positive_categories],
 			obj[k] >= 0)
+
+# ╔═╡ b59b5fe4-6bb5-4549-aaad-494594c915de
+md"""
+$obj_{k} ≤ 0,\ for\ k=WHIP,\ ERA$
+"""
 
 # ╔═╡ 290baa5c-8975-4db5-9d9f-9b5927cc42f7
 @constraint(model,
@@ -318,11 +337,8 @@ end
 
 # ╔═╡ e0f87ac8-3bb4-4bd8-94da-42ec587622ba
 md"""
-# Solution
-"""
+## Solution
 
-# ╔═╡ 04d73ac3-aa46-4f31-a82c-8a3d87076ea2
-md"""
 With all of that formulated, we can solve the model:
 """
 
@@ -343,24 +359,24 @@ The solver found a solution, so let's see what team it drafted for us:
 # ╔═╡ 8ee31704-9e55-4f6a-bafe-8eda6259c7ab
 begin
 	# initialized all players with 0
-	drafted_players = OrderedDict(i => 0 for i in df.player)
+	drafted_players = OrderedDict(i => 0 for i ∈ df[:, :player])
 
 	# assign round to players that were drafted
-	for j in 1:m, i in df.player
+	for j in 1:m, i ∈ df[:, :player]
 	    if round(value(x[i, j])) == 1
 			drafted_players[i] = j
 		end
 	end
 
 	# add to df
-	df[:, :round] = [drafted_players[i] for i in df.player]
+	df[:, :round] = [drafted_players[i] for i ∈ df[:, :player]]
 
 	# create new df
 	drafted_players_df = filter(:round => >=(1), df)
 	sort!(drafted_players_df, order(:round))
 
 	# display roster
-	show(select(drafted_players_df, [:player]), allrows=true)
+	show(select(drafted_players_df, :player), allrows=true)
 end
 
 # ╔═╡ 12d1a9fa-43bf-4377-8629-65491080695d
@@ -374,9 +390,9 @@ Let's see how our projected stat totals ended up:
 begin
 	# create stats df
 	stats = DataFrame((
-				category = [k for k in keys(targets)],
-				target = [targets[k] for k in keys(targets)],
-				actual = [sum(drafted_players_df[:, k]) for k in keys(targets)]
+				category = [k for k ∈ keys(targets)],
+				target = [targets[k] for k ∈ keys(targets)],
+				actual = [sum(drafted_players_df[:, k]) for k ∈ keys(targets)]
 		   ))
 	
 	# adjust target ratios to average
@@ -397,9 +413,9 @@ end
 
 # ╔═╡ 98a2dc95-43fc-4ae4-81fb-44d2273d8d30
 md"""
-Almost all of our objectives have been satisfied. OBP is a little below target, but this is because of the adjustment we had to make to our targets to keep the model linear. Both pitching ratioss actually beat the target set for them, so in that case our approximation worked.
+Almost all of our objectives have been satisfied. `OBP` is a little below target, but this is because of the adjustment we had to make to our targets to keep the model linear. Both pitching ratios actually beat the target set for them, so in that case our approximation worked.
 
-It looks like HR and SO were two categories that were overshot by a good amount. This makes sense based on the emphasis on pitching in the early draft rounds.
+It looks like `HR` and `SO` are two categories with a strong surplus. At least for strikeouts, this makes sense based on the emphasis on starting pitching in the early draft rounds. The power is made up in later draft rounds.
 
 We can see that a player was selected in every round and no two players were selected twice, but let's double check that the positional requirements have been met:
 """
@@ -408,13 +424,13 @@ We can see that a player was selected in every round and no two players were sel
 begin
 	# create pos df
 	pos = DataFrame((
-		position = [p for p in keys(position_min)],
-		target = [position_min[p] for p in keys(position_min)],
-		actual = [sum(drafted_players_df[:, p]) for p in keys(position_min)]
+		position = [p for p ∈ keys(position_min)],
+		target = [position_min[p] for p ∈ keys(position_min)],
+		actual = [sum(drafted_players_df[:, p]) for p ∈ keys(position_min)]
 	))
 
 	# calculate delta
-	pos[:, :delta] = pos.actual - pos.target
+	pos[:, :delta] = pos[:, :actual] - pos[:, :target]
 
 	# display df
 	pos
@@ -422,13 +438,13 @@ end
 
 # ╔═╡ 8f939cb9-2179-4f8b-a655-0a6f9bba4302
 md"""
-All of the constraints have been met. It seems the model picked a surplus of SS- and OF-eligible players.
+All of the constraints have been met. It seems the model chose extra of SS- and OF-eligible players.
 """
 
-# ╔═╡ 60f4dfce-da3c-4f86-ae93-8ad495208894
+# ╔═╡ a97621b8-2cbf-45bf-a4f0-52c28539159f
 md"""
-# TODO
-* Create `solve_mip` function to faciliate scenario analysis
+## Next Steps
+In the next analysis, we will walk through how different scenarios impact the optimal fantasy baseball draft we just solved above.
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
@@ -1009,22 +1025,23 @@ version = "17.4.0+2"
 # ╠═f2e2cd8e-59c8-452d-bf12-0e6181e6c2c5
 # ╟─4b00b875-9516-46de-8d2e-22bc8733334d
 # ╠═3b3ef5fa-b3e8-4710-9fed-c60aa991f98a
-# ╠═952b73e1-d052-4188-afd4-896bb754ec4c
+# ╟─952b73e1-d052-4188-afd4-896bb754ec4c
 # ╠═c0b8e207-3b0d-4265-93b4-dbc607ad9f9b
 # ╟─f189408f-5231-47e5-9746-5b2cb3ad0e50
 # ╠═6e59a964-ea5c-4159-b4d2-99d514ab033f
+# ╟─0560224e-d385-430c-807e-4131b91fcd1c
 # ╠═1d96d749-ff96-49aa-89af-372ff61d1504
+# ╟─b59b5fe4-6bb5-4549-aaad-494594c915de
 # ╠═290baa5c-8975-4db5-9d9f-9b5927cc42f7
 # ╟─e0f87ac8-3bb4-4bd8-94da-42ec587622ba
-# ╟─04d73ac3-aa46-4f31-a82c-8a3d87076ea2
 # ╠═5e97a550-6461-4a02-ab72-16847ca20182
 # ╟─82af4416-ce57-4ac5-af25-d684de12085f
 # ╠═8ee31704-9e55-4f6a-bafe-8eda6259c7ab
 # ╟─12d1a9fa-43bf-4377-8629-65491080695d
 # ╠═9149e595-0f96-4240-98bc-b42fdf45a8ed
-# ╟─98a2dc95-43fc-4ae4-81fb-44d2273d8d30
+# ╠═98a2dc95-43fc-4ae4-81fb-44d2273d8d30
 # ╠═9f89d124-7e00-4d01-ac9b-9bb0f150a3ab
 # ╟─8f939cb9-2179-4f8b-a655-0a6f9bba4302
-# ╟─60f4dfce-da3c-4f86-ae93-8ad495208894
+# ╟─a97621b8-2cbf-45bf-a4f0-52c28539159f
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
