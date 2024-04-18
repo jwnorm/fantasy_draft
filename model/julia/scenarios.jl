@@ -11,7 +11,6 @@ using InteractiveUtils
 md"""
 # Fantasy Baseball Draft - Scenario Analysis
 **Jacob Norman**
-
 """
 
 # ╔═╡ 4c6fe46b-1c25-4f9a-bd88-63ffb7e84a39
@@ -22,9 +21,9 @@ This report will build on the previous analysis that established a base optimal 
 
 Here are broad areas where we will investigate changes:
 
-* Projection system
-* Punting categories
-* Draft value of players
+* Projection system utilized
+* Punting one or more categories
+* Proxy for player draft value
 * Starting draft position
 * Strict vs relaxed goal bounds
 """
@@ -32,53 +31,107 @@ Here are broad areas where we will investigate changes:
 # ╔═╡ adf90438-b24e-4e80-8ceb-b47ca2f3a67d
 md"""
 ## Preprocessing
+
+To begin, we will load the required libraries.
+"""
+
+# ╔═╡ a124c6c7-dcc2-4243-bf38-a4229b902be4
+md"""
+It is also necessary to specify our targets by category and the required number ofm players on the roster who are eligible for each position. This is taken from our previous analysis.
 """
 
 # ╔═╡ b91d11e0-dcf4-4e17-bd85-1e4de7e91278
 begin
-targets = OrderedDict("HR" => 275, 
-					  "R" => 1000, 
-					  "RBI" => 1000, 
-					  "SB" => 200, 
-					  "OBP" => 0.35 * 13,
-					  "W" => 100, 
-					  "SOLD" => 75,
-					  "SO" => 1200,
-					  "WHIP" => 1.2 * 10,
-					  "ERA" => 3.7 * 10)
-
-position_min = OrderedDict("C" => 1, 
-						   "1B" => 1, 
-						   "2B" => 1, 
-						   "3B" => 1, 
-						   "SS" => 1, 
-						   "INF" => 1 + 4,  # added 4 for other INF reqs
-						   "OF" => 4, 
-						   "UT" => 1 + 10,  # added 10 for position player reqs
-						   "P" => 7)
+	targets = OrderedDict("HR" => 275, 
+						  "R" => 1000, 
+						  "RBI" => 1000, 
+						  "SB" => 200, 
+						  "OBP" => 0.35 * 13,
+						  "W" => 100, 
+						  "SOLD" => 75,
+						  "SO" => 1200,
+						  "WHIP" => 1.2 * 10,
+						  "ERA" => 3.7 * 10)
+	
+	position_min = OrderedDict("C" => 1, 
+							   "1B" => 1, 
+							   "2B" => 1, 
+							   "3B" => 1, 
+							   "SS" => 1, 
+							   "INF" => 1 + 4,  # added 4 for other INF reqs
+							   "OF" => 4, 
+							   "UT" => 1 + 10,  # added 10 for position player reqs
+							   "P" => 7)
 
 end
 
-# ╔═╡ 789e86f3-c4ca-4a0c-9974-5079468881c1
-function solve_mip(targets::OrderedDict{String, Real},
-				   positions::OrderedDict{String, Int64},
-				   strict_goal::Bool=true;
-				   projections::String="batx_atc", 
-				   draft_value::String="ADP",
-				   start_position::Int64=12,
-				   print::Bool=true, 
-				   export_arrays::Bool=false)
+# ╔═╡ 8b8911bd-8048-499b-915b-43f820ccf29c
+md"""
+Next, we need to actually run our optimization model. Rather than repeat the previous report that walks through each individual step in detail, we will collect all of them in a single function. This will help facilitate quickly iterating through multiple different scenarios.
 
-	# read in df, compute SOLD col
-	df = DataFrame(CSV.File("../../data/$projections.csv"))
+If you would like a refresher on what each formula means, check out the [prior analysis](https://github.com/jwnorm/fantasy_draft/blob/main/model/julia/base.jl).
+
+We will start by creating some helper functions to use in our main function, which we will call `fantasy_draft`.
+"""
+
+# ╔═╡ e2439dac-168d-4e99-a1f7-e377e71ed104
+"""
+This function reads in the desired projection csv file as a DataFrame and creates a new column for `SOLD`s.
+
+Arguments
+
+- `path::String`: The file path of the folder where the csv file is located
+- `system::String`: The projection system used: zips, steamer, atc, bat, batx_atc 
+
+Returns   
+
+`df::DataFrame`: The projection system df
+"""
+function read_projection_df(path::String, system::String)
+	# read in df
+	df = DataFrame(CSV.File("$path$system.csv"))
+	
+	# create SOLD col
 	df[:, :SOLD] = df[:, :SV] .+ df[:, :HLD]
+
+	return df
+end
+
+# ╔═╡ ca2c2ce7-3ee3-4c0d-8852-7d8d24757906
+"""
+This function actually solves the integer programming model for the fantasy baseball draft.
+
+Arguments
+
+- `targets::OrderedDict{String, Real}`: A dictionary of the categories and their corresponding target
+- `positions::OrderedDict{String, Int64}`: A dictionary of the roster positions and the minimum number of eligible players for each one
+- `strict_goal::Bool`: Whether or not to force the model to meet the minimum targets
+- `projections::String`: The projection system used: zips, steamer, atc, bat, batx_atc 
+- `draft_value::String`: The proxy for plasyer draft value: ADP, MinDP, MaxDP
+- `start_position::Int64`: Starting draft position in round 1
+
+Returns   
+
+- `x::Any`: Model results
+- `m::Int64`: The number of rounds in the draft
+- `weights::OrderedDict{String, Int64}`: A dictionary of all 10 categories and the direction of improvement, -1 or +1
+"""
+function solve_model(targets::OrderedDict{String, Real},
+					 positions::OrderedDict{String, Int64},
+					 strict_goal::Bool,
+					 projections::String,
+					 draft_value::String,
+					 start_position::Int64)
+
+	# read in projection df
+	df = read_projection_df("../../data/", projections)
 
 	# initialize model
 	model = Model(HiGHS.Optimizer)
 	set_silent(model)
 
 	# sets
-	n = length(df.player)
+	n = length(df[:, :player])
 	m = 25
 	negative_categories = ["WHIP", "ERA"]
 	positive_categories = [i for i in keys(targets) if i ∉ negative_categories]
@@ -100,37 +153,63 @@ function solve_mip(targets::OrderedDict{String, Real},
 
 
 	# decision variable
-	@variable(model, x[df.player, 1:m], Bin)
+	@variable(model, x[df[:, :player], 1:m], Bin)
 
 	# goal expression
-	@expression(model, obj[k in keys(targets)], 
-			((sum(x[df.player[i], j] * df[i, k] for i=1:n, j=1:m) - targets[k]) / targets[k]))
+	@expression(model, 
+				obj[k in keys(targets)], 
+				((sum(x[df[i, :player], j] * df[i, k] 
+				for i=1:n, j=1:m) - targets[k]) / targets[k]))
 
 	# objective function
 	@objective(model, Max, sum(weights[k] * obj[k] for k in keys(targets)))
 
 	# constraints
-	@constraint(model, round_max[j in 1:m], sum(x[:, j]) == 1)
+	@constraint(model,
+				round_max[j in 1:m], 
+				sum(x[:, j]) == 1)
 	
-	@constraint(model, player_max[i in df.player], sum(x[i, :]) <= 1)
+	@constraint(model, 
+				player_max[i in df[:, :player]], 
+				sum(x[i, :]) <= 1)
 
 	if start_position == 1
-		@constraint(model, adp_odd_max[j in 1:2:m], sum(df[i, draft_value] * x[df.player[i], j] for i=1:n) >= teams * (j - 1) + start_position)
+		@constraint(model, 
+					adp_odd_max[j in 1:2:m], 
+					sum(df[i, draft_value] * x[df[i, :player], j] 
+					for i=1:n) >= teams * (j - 1) + start_position)
 		
-		@constraint(model, adp_even_max[j in 2:2:m], sum(df[i, draft_value] * x[df.player[i], j] for i=1:n) >= teams * j)
+		@constraint(model, 
+					adp_even_max[j in 2:2:m], 
+					sum(df[i, draft_value] * x[df[i, :player], j] 
+					for i=1:n) >= teams * j)
 		
 	elseif start_position == 6 
-		@constraint(model, adp_odd_max[j in 1:2:m], sum(df[i, draft_value] * x[df.player[i], j] for i=1:n) >= teams * (j - 1) + start_position)
+		@constraint(model, 
+					adp_odd_max[j in 1:2:m], 
+					sum(df[i, draft_value] * x[df[i, :player], j] 
+					for i=1:n) >= teams * (j - 1) + start_position)
 
-		@constraint(model, adp_even_max[j in 2:2:m], sum(df[i, draft_value] * x[df.player[i], j] for i=1:n) >= teams * (j - 1) + start_position + 1)
+		@constraint(model, 
+					adp_even_max[j in 2:2:m], 
+					sum(df[i, draft_value] * x[df[i, :player], j] 
+					for i=1:n) >= teams * (j - 1) + start_position + 1)
 
 	elseif start_position == 12
-		@constraint(model, adp_odd_max[j in 1:2:m], sum(df[i, draft_value] * x[df.player[i], j] for i=1:n) >= teams * (j - 1) + start_position)
+		@constraint(model, 
+					adp_odd_max[j in 1:2:m], 
+					sum(df[i, draft_value] * x[df[i, :player], j] 
+					for i=1:n) >= teams * (j - 1) + start_position)
 		
-		@constraint(model, adp_even_max[j in 2:2:m], sum(df[i, draft_value] * x[df.player[i], j] for i=1:n) >= teams * (j - 2) + start_position + 1)
+		@constraint(model, 
+					adp_even_max[j in 2:2:m], 
+					sum(df[i, draft_value] * x[df[i, :player], j] 
+					for i=1:n) >= teams * (j - 2) + start_position + 1)
 	end
 
-	@constraint(model, pos_min[p in keys(position_min)], sum(df[i, p] * x[df.player[i], j] for i=1:n, j=1:m) >= position_min[p])
+	@constraint(model, 
+				pos_min[p in keys(position_min)], 
+				sum(df[i, p] * x[df[i, :player], j] for i=1:n, j=1:m) >= position_min[p])
 
 	if strict_goal
 		@constraint(model, positive_goal[k in positive_categories], obj[k] >= 0)
@@ -140,43 +219,134 @@ function solve_mip(targets::OrderedDict{String, Real},
 	# solve model
 	optimize!(model)
 
-	# generate output
+	# return optimal x values and number of draft rounds
+	return x, m, weights
+end
+
+# ╔═╡ 08151864-5f70-4870-8e7a-ad51490b70b4
+"""
+This function filters the original projections DataFrame to only include selected players and sort by draft order.
+
+
+Arguments
+
+- `df::DataFrame`: Original projections DataFrame
+- `dv::Any`: Decision variables; what player is selected by the model in each round
+- `m::Int64`: The number of rounds in the draft
+
+Returns   
+
+`roster_df::DataFrame`: Dataframe of only drafted players sorted in ascending draft order.
+"""
+function get_roster(df::DataFrame, dv::Any, m::Int64)
+
 	# initialized all players with 0
-	drafted_players = OrderedDict(i => 0 for i in df.player)
+	roster = OrderedDict(i => 0 for i in df[:, :player])
 
 	# assign round to players that were drafted
-	for j in 1:m, i in df.player
-	    if round(value(x[i, j])) == 1
-			drafted_players[i] = j
+	for j in 1:m, i in df[:, :player]
+	    if round(value(dv[i, j])) == 1
+			roster[i] = j
 		end
 	end
 	
-	# add to df
-	df[:, :round] = [drafted_players[i] for i in df.player]
+	# add round to df
+	df[:, :round] = [roster[i] for i in df[:, :player]]
 
 	# create new df
-	drafted_players_df = filter(:round => >=(1), df)
-	sort!(drafted_players_df, order(:round))
+	roster_df = filter(:round => >=(1), df)
+	sort!(roster_df, order(:round))
 
-	if print
-		show(select(drafted_players_df, :player), allrows=true)
-	end
+	return roster_df
+end
 
-	if export_arrays
-		# determine roster
-		roster = drafted_players_df[:, :player]
-		
-		# create stats array
-		stats = [sum(drafted_players_df[:, k]) for k in keys(weights)]
-		total_hitters = sum(drafted_players_df[:, :UT])
-		total_pitchers = sum(drafted_players_df[:, :P])
-		stats[5] = stats[5] / total_hitters
-		stats[[9, 10]] = stats[[9, 10]] / total_pitchers
+# ╔═╡ 51046ed3-195d-4e2d-be12-96e2348ac7fe
+"""
+This generates multiple arrays related to the model solution to faciliate scenario analysis.
+
+
+Arguments
+
+- `df::DataFrame`: DataFrame of drafted players in ascending draft order
+- `weights::OrderedDict{String, Int64}`: A dictionary of all 10 categories and the direction of improvement, -1 or +1
+- `position_min::OrderedDict{String, Int64}`: A dictionary of the roster positions and the minimum number of eligible players for each one
+
+Returns   
+
+- `roster::Array{String, 1}`: List of selected players in draft order
+- `stats::Array{Real, 1}`: List of total teams statistics in category order
+- `positions::Array{Int64, 1}`: List of total players eligible for a position in position order
+"""
+function generate_output(df::DataFrame, 
+						weights::OrderedDict{String, Int64}, 
+						position_min::OrderedDict{String, Int64})
+
+	# determine roster
+	roster = df[:, :player]
 	
-		# create position array
-		pos = [sum(drafted_players_df[:, p]) for p in keys(position_min)]
+	# create stats array
+	stats = [sum(df[:, k]) for k in keys(weights)]
+	total_hitters = sum(df[:, :UT])
+	total_pitchers = sum(df[:, :P])
 
-		return roster, stats, pos
+	stats[5] = stats[5] / total_hitters  # adjust OBP from total to avg
+	stats[[9, 10]] = stats[[9, 10]] / total_pitchers  # adjust WHIP/ERA from total to avg
+
+	# create position array
+	positions = [sum(df[:, p]) for p in keys(position_min)]
+
+	return roster, stats, positions
+end
+
+# ╔═╡ 789e86f3-c4ca-4a0c-9974-5079468881c1
+"""
+Full program for running a single integer programming model and outputting the results for the fantasy baseball draft problem.
+
+
+Arguments
+- `targets::OrderedDict{String, Real}`: A dictionary of the categories and their corresponding target
+- `positions::OrderedDict{String, Int64}`: A dictionary of the roster positions and the minimum number of eligible players for each one
+- `strict_goal:: Bool`: Whether or not to force the model to meet the minimum targets
+- `projections::String`, optional: The projection system used: zips, steamer, atc, bat, batx_atc; default is "batx_atc"
+- `draft_value::String`, optional: The proxy for plasyer draft value: ADP, MinDP, MaxDP; default is "ADP"
+- `start_position::Int64`, optional: Starting draft position in round 1; default is 12
+- `print::Bool`, optional: Whether or not to print the roster in draft order to the sceen; default is true
+- `export_arrays::Bool`, optional: Whether or not to return arrays relating to the roster, team statistics, and player positions; default is false
+
+Returns   
+
+- `roster::Array{String, 1}`: List of selected players in draft order
+- `stats::Array{Real, 1}`: List of total teams statistics in category order
+- `positions::Array{Int64, 1}`: List of total players eligible for a position in position order
+"""
+function fantasy_draft(targets::OrderedDict{String, Real},
+					   positions::OrderedDict{String, Int64},
+					   strict_goal::Bool=true;
+					   projections::String="batx_atc", 
+					   draft_value::String="ADP",
+					   start_position::Int64=12,
+					   print::Bool=true, 
+					   export_arrays::Bool=false)
+
+	# read in projection df
+	df = read_projection_df("../../data/", projections)
+
+	# solve model
+	x, m, weights = solve_model(targets, positions, strict_goal, 
+								projections, draft_value, start_position)
+
+	# get roster
+	roster_df = get_roster(df, x, m)
+
+	# if true, print roster
+	if print
+		show(select(roster_df, :player), allrows=true)
+	end
+	
+	# if true, export output arrays
+	if export_arrays
+		roster, stats, positions = generate_output(roster_df, weights, position_min)
+		return roster, stats, positions
 	end
 end
 
@@ -184,17 +354,17 @@ end
 md"""
 ## Base Case
 
-To begin, let's review the base case:
+To begin, let's review the base case from the previous analysis. As a reminder, this uses *THE BAT X* projections for batters and *ATC* projections for pitchers.
 """
 
 # ╔═╡ e847c6fb-2df7-4e46-bcdd-0352babf7826
-solve_mip(targets, position_min)
+fantasy_draft(targets, position_min)
 
 # ╔═╡ d7da5063-6824-4b79-a3af-3d25dfe5f4ea
 md"""
-As a reminder this is using THE BAT X projections for hitters and *ATC* projections for pitchers. We know from our previous analysis that we hit all of our targets except OBP.
+When I reference the base model throughout this report, this is the cohort of players it corresponds to.
 
-Some interesting notes on this roster:
+We know from our previous analysis that we hit all of our targets except one base percentage. Some other interesting notes on this roster:
 
 * The model targets starting pitching early and often. This actually goes against current popular draft strategies. The pitchers it drafted are projected to be leading in innings pitched, which will drive strikeouts and wins. In addition, the first four starters are all aces which will generally mean good ratios as well.
 
@@ -214,38 +384,66 @@ Now let's see how the projection system used impacts the final roster and the ov
 * ATC 
 * THE BAT
 
-Since the objective function and related expressions are heavily dependent on the projection system used, I suspect the rosters will vary wildly.
+Since the objective function and related expressions are heavily dependent on the projection system used, I suspect the rosters will vary wildly. To aid us, we will build another helper function.
 """
 
 # ╔═╡ ef26e745-741f-4d93-a5df-e9cf84966cfb
 projections = ["batx_atc", "zips", "steamer", "atc", "bat"]
 
-# ╔═╡ 399558ee-ae0e-4b40-be47-2d4332f2e321
-# ╠═╡ disabled = true
-#=╠═╡
-begin
+# ╔═╡ 0a8f41f7-c29f-46ce-bce5-93a5b0d6115b
+"""
+This program iterates through a list of projection systems and compares the subsequent model results.
+
+Arguments
+- `targets::OrderedDict{String, Real}`: A dictionary of the categories and their corresponding target
+- `position_min::OrderedDict{String, Int64}`: A dictionary of the roster positions and the minimum number of eligible players for each one
+- `projections::Array{String, 1}`: List of projection systems to be compared
+
+Returns   
+
+- `roster_df::DataFrame`: DataFrame where each column is the roster in draft order for a scenario
+- `stats_df::DataFrame`: DataFrame where each column is the team category totals
+- `positions_df::DataFrame`: DataFrame where each column is number of players by position for each scenario
+"""
+function run_projection_scenarios(targets::OrderedDict{String, Real},
+								  position_min::OrderedDict{String, Int64},   
+								  projections::Array{String, 1})
+
+	# initialize empty roster df
 	roster_df = DataFrame()
 	
+	# initialize stats df and add targets
 	stats_df = DataFrame(Category = [k for k in keys(targets)],
 						 Target=[targets[k] for k in keys(targets)])
 
 	# convert ratio targets from sum to avg
 	stats_df[5, :Target] = stats_df[5, :Target] / 13
 	stats_df[[9, 10], :Target] = stats_df[[9, 10], :Target] / 10
-	
-	pos_df = DataFrame(Position = [p for p in keys(position_min)],
-		Target=[position_min[p] for p in keys(position_min)])
-	
-	for system in projections
-		roster, stats, pos = solve_mip(targets, position_min; projections=system, print=false, export_arrays=true)
 
+	# initialize positions df and add targets
+	positions_df = DataFrame(Position = [p for p in keys(position_min)],
+	Target=[position_min[p] for p in keys(position_min)])
+
+	# loop through scenarios and create new column in all dfs
+	for system in projections
+		roster, stats, positions = fantasy_draft(targets, position_min; 
+		projections=system, print=false, export_arrays=true)
+	
 		roster_df[:, system] = roster
 		stats_df[:, system] = stats
-		pos_df[:, system] = pos
+		positions_df[:, system] = positions
 	end
 
+	return roster_df, stats_df, positions_df
+	
 end
-  ╠═╡ =#
+
+# ╔═╡ 9e0ef014-53c4-45f3-ac02-afc0cc3bb269
+roster_proj, stats_proj, positions_proj = run_projection_scenarios(targets,
+										  position_min, projections)
+
+# ╔═╡ 53ab34aa-6fa9-4a76-a5c9-85d50be9b7ce
+roster_proj
 
 # ╔═╡ 095f7ad1-8e74-4f2c-954a-7db24133680a
 md"""
@@ -281,6 +479,9 @@ From a hitters perspective, many of the same players are selected, and those tha
 Moving on, let's see how the team stats looks for each model:
 """
 
+# ╔═╡ 13b9cec6-0364-4de7-970e-3b90e5783437
+stats_proj
+
 # ╔═╡ 4e9f2530-7055-4ba2-a8a8-81497f3e5efe
 md"""
 It is easy to see where the bottleneck is: clearly wins are hard to come by since no model has more than the minimum target. Wins are difficult to project since they are not entirely driven by individual player performance and can therefore be more random.
@@ -295,7 +496,7 @@ Let's also look at the positional eligibility of the rosters:
 """
 
 # ╔═╡ a2abbd75-1cb8-4f7b-8e4b-cb9d1cc53f08
-pos_df
+positions_proj
 
 # ╔═╡ ef7b348e-f4d9-4296-a877-a6e55dbd7faa
 md"""
@@ -308,11 +509,61 @@ md"""
 
 Next, we will investigate adjusting the draft value of players. This will determine how late a player is available and, therefore, the latest round they can be selected.
 
-By default, we chose to use *A**verage **D**raft **P**osition as a proxy for player value, but how does our model change if we use the latest draft position, which I am calling `MaxDP`?
+By default, we chose to use **A**verage **D**raft **P**osition as a proxy for player value, but how does our model change if we use the latest draft position (which I am calling `MaxDP`)?
+
+Again, we will use a helper function to accomplish this.
 """
 
 # ╔═╡ b77c387d-872a-466c-a8c6-427f76494349
-draft_value = ["ADP", "MaxDP"]
+draft_values = ["ADP", "MaxDP"]
+
+# ╔═╡ ce5a4b0a-7bca-48ec-9c02-2e29bd83fd6c
+"""
+This program iterates through a list of draft value systems and compares the subsequent model results.
+
+Arguments
+- `targets::OrderedDict{String, Real}`: A dictionary of the categories and their corresponding target
+- `position_min::OrderedDict{String, Int64}`: A dictionary of the roster positions and the minimum number of eligible players for each one
+- `draft_values::Array{String, 1}`: List of player draft valuation systems to be compared
+
+Returns   
+
+- `roster_df::DataFrame`: DataFrame where each column is the roster in draft order for a scenario
+- `stats_df::DataFrame`: DataFrame where each column is the team category totals for a scenario
+"""
+function run_draft_value_scenarios(targets::OrderedDict{String, Real}, 
+								   draft_values::Array{String, 1})
+
+	# initialize empty roster df
+	roster_df = DataFrame()
+	
+	# initialize stats df and add targets
+	stats_df = DataFrame(Category = [k for k in keys(targets)],
+						 Target=[targets[k] for k in keys(targets)])
+
+	# convert ratio targets from sum to avg
+	stats_df[5, :Target] = stats_df[5, :Target] / 13
+	stats_df[[9, 10], :Target] = stats_df[[9, 10], :Target] / 10
+
+
+	# loop through scenarios and create new column in all dfs
+	for system in draft_values
+		roster, stats = fantasy_draft(targets, position_min; 
+		draft_value=system, print=false, export_arrays=true)
+	
+		roster_df[:, system] = roster
+		stats_df[:, system] = stats
+	end
+
+	return roster_df, stats_df
+	
+end
+
+# ╔═╡ 2b00da3f-f7d5-4e16-9b6f-d4d552d6c01a
+roster_dv, stats_dv = run_draft_value_scenarios(targets, draft_values)
+
+# ╔═╡ 24a737a7-9f4d-4cef-8807-8009c37d175f
+roster_dv
 
 # ╔═╡ e3202458-11ae-40a0-90ce-21d1720b536d
 md"""
@@ -326,6 +577,9 @@ Matt Chapman is drafted in almost the exact same position even though his last d
 
 Let's take a look at how the team stat totals look with the new team:
 """
+
+# ╔═╡ 3abfc95d-b0bd-45a9-b417-97702432f128
+stats_dv
 
 # ╔═╡ 107f7761-75f5-4928-b47a-051e82a45e1d
 md"""
@@ -359,6 +613,8 @@ Let's rerun our base case for three different scenarios where we punt:
 * SOLDs
 * Wins
 * SOLDs & Wins
+
+We will create a helper function for this scenario as well.
 """
 
 # ╔═╡ eb9d5883-ae90-4e68-8025-2d2a365d452c
@@ -373,6 +629,54 @@ begin
 						"Punt Solds & Wins" => punt_solds_wins)
 end	
 
+# ╔═╡ d235c966-786e-45e3-a81a-8b8bcb8362a3
+"""
+This program iterates through a list of categories to be punted and compares the subsequent model results.
+
+Arguments
+- `targets::OrderedDict{String, Real}`: A dictionary of the categories and their corresponding target
+- `position_min::OrderedDict{String, Int64}`: A dictionary of the roster positions and the minimum number of eligible players for each one
+- `punts::OrderedDict{String, OrderedDict{String, Real}}`: A dictionary of target dictionaries where certain categories are punted
+
+Returns   
+
+- `roster_df::DataFrame`: DataFrame where each column is the roster in draft order for a scenario
+- `stats_df::DataFrame`: DataFrame where each column is the team category totals for a scenario
+"""
+function run_punt_scenarios(targets::OrderedDict{String, Real},
+							punts::OrderedDict{String, OrderedDict{String, Real}})
+
+	# initialize empty roster df
+	roster_df = DataFrame()
+	
+	# initialize stats df and add targets
+	stats_df = DataFrame(Category = [k for k in keys(targets)],
+						 Target=[targets[k] for k in keys(targets)])
+
+	# convert ratio targets from sum to avg
+	stats_df[5, :Target] = stats_df[5, :Target] / 13
+	stats_df[[9, 10], :Target] = stats_df[[9, 10], :Target] / 10
+
+
+	# loop through scenarios and create new column in all dfs
+	for new_targets in keys(punts)
+		roster, stats = fantasy_draft(punts[new_targets], position_min; 
+		print=false, export_arrays=true)
+	
+		roster_df[:, new_targets] = roster
+		stats_df[:, new_targets] = stats
+	end
+
+	return roster_df, stats_df
+	
+end
+
+# ╔═╡ 9af12396-88c6-4bb3-8367-1bfa31e8fefa
+roster_punt, stats_punt = run_punt_scenarios(targets, punts)
+
+# ╔═╡ 06c5ec40-d6bd-474a-bd4e-b0decc07e11a
+roster_punt
+
 # ╔═╡ d6605196-5a51-4d00-b59f-5f0e497853a4
 md"""
 By punting SOLDs, all relivers on the roster are replaced with additional starters or position players. Two additional position players we swapped in for pitchers, while Camilo Doval anbd Evan Phillips were replaced with Bobby Miller and Logan Gilbert, respectively. Otherwise, the rosters look remarkably similar.
@@ -385,6 +689,9 @@ By choosing to punt SOLDs and wins, the roster skews towards hitters. The first 
 
 Now let's see how the team stat totals compare among the different scenarios:
 """
+
+# ╔═╡ f0e2fa8f-de72-4170-b65b-a1ce02c38051
+stats_punt
 
 # ╔═╡ 2896b638-5ba7-4788-bc48-5f7573aa7b3d
 md"""
@@ -404,7 +711,60 @@ md"""
 Conventional wisdom would suggest that having the first selection in a fantasy draft would result in the best (theoretical) team among others in the league. This is usually because there is a sharp skills dropoff after the first few picks. There is a tradeoff though: the snake format of the draft means that the person with the first overall selection will then have the *last* pick in the second round. In the case of a 12-team league, this means they will have picks 1 and 24. Conversely, the person with the last pick in the first round will have the *first* pick of the second round. In a 12-team league, this means they would own picks 12 and 13. The question is: which position is more optimal?
 
 The base model assumes a 12-team league and that the model is drafting in the last spot of the first round. This is because this is where I drafted earlier this season. We will rerun the base case assuming I instead had the first and sixth pick to see how this affects the final roster and the overall stat totals.
+
+Let's start by creating a scenario helper function.
 """
+
+# ╔═╡ 7b63073d-8f7b-48d5-bd31-95b59e74ca55
+starting_positions = [1, 6, 12]
+
+# ╔═╡ b7c7d0d2-397e-4350-b57a-71abd8b11cc9
+"""
+This program iterates through a list of categories to be starting draft positions in round 1 and compares the subsequent model results.
+
+Arguments
+- `targets::OrderedDict{String, Real}`: A dictionary of the categories and their corresponding target
+- `position_min::OrderedDict{String, Int64}`: A dictionary of the roster positions and the minimum number of eligible players for each one
+- `starting_positions::Array{Int64, 1}`: List of starting draft positions in the first round
+
+Returns   
+
+- `roster_df::DataFrame`: DataFrame where each column is the roster in draft order for a scenario
+- `stats_df::DataFrame`: DataFrame where each column is the team category totals for a scenario
+"""
+function run_draft_position_scenarios(targets::OrderedDict{String, Real},
+									  starting_positions::Array{Int64, 1})
+
+	# initialize empty roster df
+	roster_df = DataFrame()
+	
+	# initialize stats df and add targets
+	stats_df = DataFrame(Category = [k for k in keys(targets)],
+						 Target=[targets[k] for k in keys(targets)])
+
+	# convert ratio targets from sum to avg
+	stats_df[5, :Target] = stats_df[5, :Target] / 13
+	stats_df[[9, 10], :Target] = stats_df[[9, 10], :Target] / 10
+
+
+	# loop through scenarios and create new column in all dfs
+	for num in starting_positions
+		roster, stats = fantasy_draft(targets, position_min; 
+		start_position=num, print=false, export_arrays=true)
+	
+		roster_df[:, "Pick $num"] = roster
+		stats_df[:, "Pick $num"] = stats
+	end
+
+	return roster_df, stats_df
+	
+end
+
+# ╔═╡ 1994cbca-44bd-484b-bf89-0a8b0dcac797
+roster_pick, stats_pick = run_draft_position_scenarios(targets, starting_positions)
+
+# ╔═╡ d744dd56-31fa-4469-8804-d73ae9e03f01
+roster_pick
 
 # ╔═╡ 65c53df3-2b0e-4630-ba90-361482436101
 md"""
@@ -416,6 +776,9 @@ Starting with Tatis, as stated above, we should compare him directly to Acuna. T
 
 We can look at this more closely by examining the team category totals for each scenario.
 """
+
+# ╔═╡ 210e96bc-b716-4c74-880c-88839a47eccb
+stats_pick
 
 # ╔═╡ da975966-af09-42fe-82b1-b147c9d2a0b0
 md"""
@@ -438,32 +801,53 @@ For our final scenario analysis, we will remove the requirement that each target
 # ╔═╡ 01c05948-6397-4565-b714-69193c0ac5bb
 goal_bounds = OrderedDict("Strict" => true, "Relaxed" => false)
 
-# ╔═╡ 53ab34aa-6fa9-4a76-a5c9-85d50be9b7ce
-roster_df
+# ╔═╡ 50857ee7-3c50-46e7-83ff-3cf985c0a505
+"""
+This program iterates through strict and relaxed scenarios for goal bounds and compares the model results.
 
-# ╔═╡ 13b9cec6-0364-4de7-970e-3b90e5783437
-stats_df
+Arguments
+- `targets::OrderedDict{String, Real}`: A dictionary of the categories and their corresponding target
+- `position_min::OrderedDict{String, Int64}`: A dictionary of the roster positions and the minimum number of eligible players for each one
+- `goal_bounds::OrderedDict{String, Bool}`: A dictionary for strict and relaxed goal bounds
 
-# ╔═╡ 24a737a7-9f4d-4cef-8807-8009c37d175f
-roster_df
+Returns   
 
-# ╔═╡ 3abfc95d-b0bd-45a9-b417-97702432f128
-stats_df
+- `roster_df::DataFrame`: DataFrame where each column is the roster in draft order for a scenario
+- `stats_df::DataFrame`: DataFrame where each column is the team category totals for a scenario
+"""
+function run_goal_bounds_scenarios(targets::OrderedDict{String, Real},
+								   starting_positions::OrderedDict{String, Bool})
 
-# ╔═╡ 06c5ec40-d6bd-474a-bd4e-b0decc07e11a
-roster_df
+	# initialize empty roster df
+	roster_df = DataFrame()
+	
+	# initialize stats df and add targets
+	stats_df = DataFrame(Category = [k for k in keys(targets)],
+						 Target=[targets[k] for k in keys(targets)])
 
-# ╔═╡ f0e2fa8f-de72-4170-b65b-a1ce02c38051
-stats_df
+	# convert ratio targets from sum to avg
+	stats_df[5, :Target] = stats_df[5, :Target] / 13
+	stats_df[[9, 10], :Target] = stats_df[[9, 10], :Target] / 10
 
-# ╔═╡ d744dd56-31fa-4469-8804-d73ae9e03f01
-roster_df
 
-# ╔═╡ 210e96bc-b716-4c74-880c-88839a47eccb
-stats_df
+	# loop through scenarios and create new column in all dfs
+	for bound in keys(goal_bounds)
+		roster, stats = fantasy_draft(targets, position_min, goal_bounds[bound]; 
+		print=false, export_arrays=true)
+	
+		roster_df[:, bound] = roster
+		stats_df[:, bound] = stats
+	end
+
+	return roster_df, stats_df
+	
+end
+
+# ╔═╡ 09c5858d-cf44-44b1-a3fe-741297ece7e0
+roster_bounds, stats_bounds = run_goal_bounds_scenarios(targets, goal_bounds)
 
 # ╔═╡ ba991ed7-59f8-48d7-8c76-0e48d1ec9489
-roster_df
+roster_bounds
 
 # ╔═╡ 6e53fa35-0d5e-42cd-919e-03d6a894dd66
 md"""
@@ -475,7 +859,7 @@ Let's take a look at how this impacts our objectives:
 """
 
 # ╔═╡ fbe92cf9-5233-4fee-9f4d-769a9476289f
-stats_df
+stats_bounds
 
 # ╔═╡ fd56a380-dfa7-4eab-a6cb-c8438eb2bdf9
 md"""
@@ -487,95 +871,6 @@ As an aside, I do wonder what effect drafting the *Relaxed* model's roster would
 
 > **Note:** In my real draft, I actually selected several players that showed up in the *Relaxed* model: Jose Ramirez, Edwin Diaz, Cedric Mullins, and Daulton Varsho. My strategy was actually to soft punt saves and holds. My reasoning was that a lot of SOLDs are actually earned from waiver wire pickups anyway, so why waste premium draft capital on them?
 """
-
-# ╔═╡ 1e7c8f62-78ce-4e91-b634-889bd9e869ac
-# ╠═╡ disabled = true
-#=╠═╡
-begin
-	roster_df = DataFrame()
-	
-	stats_df = DataFrame(Category = [k for k in keys(targets)],
-						 Target=[targets[k] for k in keys(targets)])
-
-	# convert ratio targets from sum to avg
-	stats_df[5, :Target] = stats_df[5, :Target] / 13
-	stats_df[[9, 10], :Target] = stats_df[[9, 10], :Target] / 10
-	
-	for v in draft_value
-		roster, stats, pos = solve_mip(targets, position_min; draft_value=v, print=false, export_arrays=true)
-
-		roster_df[:, v] = roster
-		stats_df[:, v] = stats
-	end
-
-end
-  ╠═╡ =#
-
-# ╔═╡ a94c2b31-5193-4c89-b296-6b359708fff4
-# ╠═╡ disabled = true
-#=╠═╡
-begin
-	roster_df = DataFrame()
-	
-	stats_df = DataFrame(Category = [k for k in keys(targets)],
-						 Target=[targets[k] for k in keys(targets)])
-
-	# convert ratio targets from sum to avg
-	stats_df[5, :Target] = stats_df[5, :Target] / 13
-	stats_df[[9, 10], :Target] = stats_df[[9, 10], :Target] / 10
-	
-	for p in keys(punts)
-		roster, stats, pos = solve_mip(punts[p], position_min; print=false, export_arrays=true)
-
-		roster_df[:, p] = roster
-		stats_df[:, p] = stats
-	end
-
-end
-  ╠═╡ =#
-
-# ╔═╡ 71a17300-fe89-40d1-96a3-2e1677091b77
-begin
-	roster_df = DataFrame()
-	
-	stats_df = DataFrame(Category = [k for k in keys(targets)],
-						 Target=[targets[k] for k in keys(targets)])
-
-	# convert ratio targets from sum to avg
-	stats_df[5, :Target] = stats_df[5, :Target] / 13
-	stats_df[[9, 10], :Target] = stats_df[[9, 10], :Target] / 10
-	
-	for g in keys(goal_bounds)
-		roster, stats, pos = solve_mip(targets, position_min, goal_bounds[g]; print=false, export_arrays=true)
-
-		roster_df[:, g] = roster
-		stats_df[:, g] = stats
-	end
-
-end
-
-# ╔═╡ e20deea0-20a2-432a-af92-d3d41c405ee0
-# ╠═╡ disabled = true
-#=╠═╡
-begin
-	roster_df = DataFrame()
-	
-	stats_df = DataFrame(Category = [k for k in keys(targets)],
-						 Target=[targets[k] for k in keys(targets)])
-
-	# convert ratio targets from sum to avg
-	stats_df[5, :Target] = stats_df[5, :Target] / 13
-	stats_df[[9, 10], :Target] = stats_df[[9, 10], :Target] / 10
-	
-	for p in [1, 6, 12]
-		roster, stats, pos = solve_mip(targets, position_min; start_position=p, print=false, export_arrays=true)
-
-		roster_df[:, "Pick $p"] = roster
-		stats_df[:, "Pick $p"] = stats
-	end
-
-end
-  ╠═╡ =#
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -1124,14 +1419,21 @@ version = "17.4.0+2"
 # ╟─4c6fe46b-1c25-4f9a-bd88-63ffb7e84a39
 # ╟─adf90438-b24e-4e80-8ceb-b47ca2f3a67d
 # ╠═7d4d5798-fac3-11ee-0020-a3bc46fa36d2
+# ╟─a124c6c7-dcc2-4243-bf38-a4229b902be4
 # ╠═b91d11e0-dcf4-4e17-bd85-1e4de7e91278
+# ╟─8b8911bd-8048-499b-915b-43f820ccf29c
+# ╠═e2439dac-168d-4e99-a1f7-e377e71ed104
+# ╠═ca2c2ce7-3ee3-4c0d-8852-7d8d24757906
+# ╠═08151864-5f70-4870-8e7a-ad51490b70b4
+# ╠═51046ed3-195d-4e2d-be12-96e2348ac7fe
 # ╠═789e86f3-c4ca-4a0c-9974-5079468881c1
-# ╟─b08ca88d-9e21-46d4-8d1f-fc16df6905e3
+# ╠═b08ca88d-9e21-46d4-8d1f-fc16df6905e3
 # ╠═e847c6fb-2df7-4e46-bcdd-0352babf7826
-# ╠═d7da5063-6824-4b79-a3af-3d25dfe5f4ea
+# ╟─d7da5063-6824-4b79-a3af-3d25dfe5f4ea
 # ╟─5b71337e-2b99-4d37-9499-896f079e60ae
 # ╠═ef26e745-741f-4d93-a5df-e9cf84966cfb
-# ╠═399558ee-ae0e-4b40-be47-2d4332f2e321
+# ╠═0a8f41f7-c29f-46ce-bce5-93a5b0d6115b
+# ╠═9e0ef014-53c4-45f3-ac02-afc0cc3bb269
 # ╠═53ab34aa-6fa9-4a76-a5c9-85d50be9b7ce
 # ╟─095f7ad1-8e74-4f2c-954a-7db24133680a
 # ╠═13b9cec6-0364-4de7-970e-3b90e5783437
@@ -1140,27 +1442,32 @@ version = "17.4.0+2"
 # ╟─ef7b348e-f4d9-4296-a877-a6e55dbd7faa
 # ╟─97ce6cd2-4763-4d0f-99bd-15ad38995c31
 # ╠═b77c387d-872a-466c-a8c6-427f76494349
-# ╠═1e7c8f62-78ce-4e91-b634-889bd9e869ac
+# ╠═ce5a4b0a-7bca-48ec-9c02-2e29bd83fd6c
+# ╠═2b00da3f-f7d5-4e16-9b6f-d4d552d6c01a
 # ╠═24a737a7-9f4d-4cef-8807-8009c37d175f
 # ╟─e3202458-11ae-40a0-90ce-21d1720b536d
 # ╠═3abfc95d-b0bd-45a9-b417-97702432f128
 # ╟─107f7761-75f5-4928-b47a-051e82a45e1d
 # ╠═a66596b3-f34f-4577-b875-321b70ad1ff1
 # ╠═eb9d5883-ae90-4e68-8025-2d2a365d452c
-# ╠═a94c2b31-5193-4c89-b296-6b359708fff4
+# ╠═d235c966-786e-45e3-a81a-8b8bcb8362a3
+# ╠═9af12396-88c6-4bb3-8367-1bfa31e8fefa
 # ╠═06c5ec40-d6bd-474a-bd4e-b0decc07e11a
 # ╟─d6605196-5a51-4d00-b59f-5f0e497853a4
 # ╠═f0e2fa8f-de72-4170-b65b-a1ce02c38051
 # ╟─2896b638-5ba7-4788-bc48-5f7573aa7b3d
 # ╟─b7deb98a-d2cc-49cc-9598-3b3c29d51301
-# ╠═e20deea0-20a2-432a-af92-d3d41c405ee0
+# ╠═7b63073d-8f7b-48d5-bd31-95b59e74ca55
+# ╠═b7c7d0d2-397e-4350-b57a-71abd8b11cc9
+# ╠═1994cbca-44bd-484b-bf89-0a8b0dcac797
 # ╠═d744dd56-31fa-4469-8804-d73ae9e03f01
-# ╠═65c53df3-2b0e-4630-ba90-361482436101
+# ╟─65c53df3-2b0e-4630-ba90-361482436101
 # ╠═210e96bc-b716-4c74-880c-88839a47eccb
 # ╟─da975966-af09-42fe-82b1-b147c9d2a0b0
 # ╟─456630b8-594d-40b4-b1c9-54cfe459fb0e
 # ╠═01c05948-6397-4565-b714-69193c0ac5bb
-# ╠═71a17300-fe89-40d1-96a3-2e1677091b77
+# ╠═50857ee7-3c50-46e7-83ff-3cf985c0a505
+# ╠═09c5858d-cf44-44b1-a3fe-741297ece7e0
 # ╠═ba991ed7-59f8-48d7-8c76-0e48d1ec9489
 # ╟─6e53fa35-0d5e-42cd-919e-03d6a894dd66
 # ╠═fbe92cf9-5233-4fee-9f4d-769a9476289f
