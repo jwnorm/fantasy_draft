@@ -34,11 +34,11 @@ md"""
 
 Before we actually start to build the model, let's read in the data that this will be based on. The projections are courtesy of [Fangraphs](https://www.fangraphs.com). The hitters are using *THE BAT X* projections, while pitchers projections are based off *ATC*. 
 
-I chose *THE BAT X* as my favored source of projections because they are leveraging Statcast data. These are process-oriented metrics that include, but are not limited to: average launch angle, average exit velocity, and hard hit rate. In other words, these capture the hitter's approach to predict their futures outcomes, not just their past outcomes alone.
+I chose *THE BAT X* as my favored source of projections because they are leveraging Statcast data. These are process-oriented metrics that include, but are not limited to: average launch angle, average exit velocity, and hard hit rate. In other words, these capture the hitter's approach to predict their future statistics, not just their past outcomes alone.
 
 Normally, I would like the projections of both the hitters and the pitchers to be from the same source; however, *THE BAT X* only projects for hitters at present, so I opted to use the *ATC* projections for pitchers. *ATC* stands for **A**verage **T**otal **C**ost and, as its name suggests, it averages the projections of several different sources.
 
-**A**verage **D**raft **P**osition (ADP) and related information is sourced from [NFBC](https://nfc.shgn.com/baseball) Rotowire Online 12-team leagues for the month of March. In fact, I only pulled the players into the model if they were drafted during this time period.
+**A**verage **D**raft **P**osition (`ADP`) and related information is sourced from [NFBC](https://nfc.shgn.com/baseball) Rotowire Online 12-team leagues for the month of March. In fact, I only pulled the players into the model if they were drafted during this time period.
 
 First, let's load the required packages:
 """
@@ -68,7 +68,7 @@ For hitters:
 For pitchers:
 * **W**ins (`W`)
 * **S**trike**O**uts (`SO`)
-* **S**aves plus **HOLD**s (`SOLD`)
+* **S**aves plus H**OLD**s (`SOLD`)
 * **E**arned **R**un **A**verage (`ERA`)
 * **W**alks + **H**its / **I**nnings **P**itched (`WHIP`)
 
@@ -106,9 +106,9 @@ end
 
 # ╔═╡ efdfd4d2-596c-44d9-978b-4d2e541d35b5
 md"""
-I had to include the team the player currently belongs to as part of the player ID, since there were a few players that had the same first and last names, such as Will Smith or Logan Allen. 
+I had to include the team the player currently belongs to as part of the player ID, since there were a few players that had the same first and last names, such as Will Smith and Logan Allen. 
 
-With that in mind, the are $n unique players and $m rounds in the draft. For mathematical formulations, we will just use the players index out of the $n for convenience.
+With that in mind, the are $n unique players and $m rounds in the draft. For mathematical formulations, we will just use the players index out of the $n for convenience. This means that we will have $(n * m) decision variables!
 """
 
 # ╔═╡ 334c0497-e812-43ac-bbcc-63c3fa5c3b87
@@ -126,7 +126,7 @@ end
 
 # ╔═╡ e5ebadec-b2f2-4fa5-8666-d56e8346bb39
 md"""
-Next, we will establish the targets for each of the 10 categories. These are based on the winning team's numbers from last year's league. I did not look back any further due to significant rule changes in the MLB that began in the 2023 season. With the exception of `ERA` and `WHIP`, the goal is the exceed all of these targets.
+Next, we will establish the targets for each of the 10 categories. These are based on the winning team's numbers from last year's fantasy league. I did not look back any further due to significant rule changes in the MLB that began in the 2023 season. With the exception of `ERA` and `WHIP`, the goal is the exceed all of these targets.
 """
 
 # ╔═╡ f991061a-2be5-4563-93f8-2f1f7730fee1
@@ -143,7 +143,7 @@ targets = OrderedDict("HR" => 275,
 
 # ╔═╡ 96b7d9be-0013-4f9d-a300-6e319789f7fe
 md"""
-> **Important Note:** While most of the categories are counting stats (can only take integer values), there are three measures that are ratios: `OBP`, `WHIP`, and `ERA`. To keep the model linear, I will look to maximize the sum and not the average as I would like. To accomplish this, I needed to approximate a target ratio for each stat, which meant I needed to guess the number of hitters and pitchers that will be on my roster. This is not a perfect solution, but it will keep everything linear.
+> **Important Note:** While most of the categories are counting stats (can only take integer values), there are three measures that are ratios: `OBP`, `WHIP`, and `ERA`. To keep the model linear, I will look to maximize the sum and not the average as I would like. To accomplish this, I needed to approximate a target ratio for each stat, which meant I needed to guess the number of hitters and pitchers that will be on my model roster. This is not a perfect solution, but it will keep everything linear.
 """
 
 # ╔═╡ e243dd01-d94f-48ab-bf5a-a9077e62c2ba
@@ -194,8 +194,9 @@ md"""
 
 We need to build some expressions that relate to the objective function. There will be one term for each statistical category of the following form:
 
-$\frac{\sum_{i=1}^{n}\sum_{j=1}^{m}{c_{ik}x_{ij}}- target_{k}}
-{target_{k}},\ for\ k=1-10\ (category)$
+$\frac{\sum_{i=1}^{579}\sum_{j=1}^{25}{c_{ik}x_{ij}}- target_{k}}
+{target_{k}},$
+$for\ k=HR,\ R,\ RBI,\ SB,\ OBP,\ W,\ SOLD,\ SO,\ WHIP,\ ERA$
 
 The subobjectives are formulated this way to normalize the scale of each statistical category, some are in the thousands and others can be less than 100.
 """
@@ -236,7 +237,7 @@ $\sum_{i=1}^{579}{x_{ij}} = 1,\ for\ j=1-25$
 """
 
 # ╔═╡ e2911ffd-d89b-4004-8749-b42d116ac841
-## RoundMax
+# RoundMax
 @constraint(model, 
 			round_max[j ∈ 1:m], 
 			sum(x[:, j]) == 1)
@@ -249,7 +250,7 @@ $\sum_{j=1}^{25}{x_{ij}} ≤ 1,\ for\ i=1-579$
 """
 
 # ╔═╡ 1c11428a-748b-4438-8dca-0e6f684343ad
-## PlayerMax
+# PlayerMax
 @constraint(model, 
 			player_max[i ∈ df[:, :player]], 
 			sum(x[i, :]) <= 1)
@@ -415,7 +416,7 @@ end
 md"""
 Almost all of our objectives have been satisfied. `OBP` is a little below target, but this is because of the adjustment we had to make to our targets to keep the model linear. Both pitching ratios actually beat the target set for them, so in that case our approximation worked.
 
-It looks like `HR` and `SO` are two categories with a strong surplus. At least for strikeouts, this makes sense based on the emphasis on starting pitching in the early draft rounds. The power is made up in later draft rounds.
+It looks like `HR` and `SO` are two categories with a strong surplus. At least for strikeouts, this makes sense based on the emphasis on starting pitching in the early draft rounds. The power is made up in later draft rounds, which suggests you can wait on power and still find value.
 
 We can see that a player was selected in every round and no two players were selected twice, but let's double check that the positional requirements have been met:
 """
@@ -438,7 +439,32 @@ end
 
 # ╔═╡ 8f939cb9-2179-4f8b-a655-0a6f9bba4302
 md"""
-All of the constraints have been met. It seems the model chose extra of SS- and OF-eligible players.
+All of the positional constraints have been met. It seems the model chose extra SS- and OF-eligible players.
+
+Now let's look to our final draft constraints, *ADPOddMax* and *ADPEvenMax*. These are meant to mimic the snake draft and ensure that no player is selected after their `ADP`.
+"""
+
+# ╔═╡ 14b7b569-fe4f-4655-8fa0-653fa0c1e396
+begin
+	odd = [teams * (j - 1) + start_position for j=1:2:25]
+	even = [teams * (j - 2) + start_position + 1 for j=2:2:24]
+	draft_picks = sort(vcat(even, odd))
+	drafted_players_df[:, :Pick] = draft_picks
+end
+
+# ╔═╡ 107ae882-1d26-437f-b215-d7744aa6d457
+show(select(drafted_players_df, [:Pick, :ADP, :player]), allrows=true)
+
+# ╔═╡ 242b7a0f-3c88-45f6-a23a-97f22f48e3d5
+md"""
+We can confirm that no player was selected with a pick that was after their `ADP`. The majority of the players are actually selected well before their `ADP`. This is especially true in the first two rounds with Zack Wheeler and Luis Castillo. I would be confident that these players would be available when the model chose to select them; however, there are others that I would deem "high-risk" selections. These players were taken very close to their `ADP`:
+
+* Camilo Doval
+* Kyle Schwarber
+* Logan O'Hoppe
+* Jose Berrios
+
+It is highly probable that some of these players will be selected prior to when the model decided to draft them in a real-world situation. We will address how this might impact our roster with scenario analysis.
 """
 
 # ╔═╡ a97621b8-2cbf-45bf-a4f0-52c28539159f
@@ -1028,7 +1054,7 @@ version = "17.4.0+2"
 # ╟─952b73e1-d052-4188-afd4-896bb754ec4c
 # ╠═c0b8e207-3b0d-4265-93b4-dbc607ad9f9b
 # ╟─f189408f-5231-47e5-9746-5b2cb3ad0e50
-# ╠═6e59a964-ea5c-4159-b4d2-99d514ab033f
+# ╟─6e59a964-ea5c-4159-b4d2-99d514ab033f
 # ╟─0560224e-d385-430c-807e-4131b91fcd1c
 # ╠═1d96d749-ff96-49aa-89af-372ff61d1504
 # ╟─b59b5fe4-6bb5-4549-aaad-494594c915de
@@ -1039,9 +1065,12 @@ version = "17.4.0+2"
 # ╠═8ee31704-9e55-4f6a-bafe-8eda6259c7ab
 # ╟─12d1a9fa-43bf-4377-8629-65491080695d
 # ╠═9149e595-0f96-4240-98bc-b42fdf45a8ed
-# ╠═98a2dc95-43fc-4ae4-81fb-44d2273d8d30
+# ╟─98a2dc95-43fc-4ae4-81fb-44d2273d8d30
 # ╠═9f89d124-7e00-4d01-ac9b-9bb0f150a3ab
 # ╟─8f939cb9-2179-4f8b-a655-0a6f9bba4302
+# ╠═14b7b569-fe4f-4655-8fa0-653fa0c1e396
+# ╠═107ae882-1d26-437f-b215-d7744aa6d457
+# ╟─242b7a0f-3c88-45f6-a23a-97f22f48e3d5
 # ╟─a97621b8-2cbf-45bf-a4f0-52c28539159f
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002

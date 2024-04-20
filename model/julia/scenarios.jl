@@ -94,6 +94,10 @@ function read_projection_df(path::String, system::String)
 	# create SOLD col
 	df[:, :SOLD] = df[:, :SV] .+ df[:, :HLD]
 
+	# create draft position cols
+	df[:, :HighDP] = df[:, :ADP] * 1.15
+	df[:, :LowDP] = df[:, :ADP] * 0.85
+	
 	return df
 end
 
@@ -107,7 +111,7 @@ Arguments
 - `positions::OrderedDict{String, Int64}`: A dictionary of the roster positions and the minimum number of eligible players for each one
 - `strict_goal::Bool`: Whether or not to force the model to meet the minimum targets
 - `projections::String`: The projection system used: zips, steamer, atc, bat, batx_atc 
-- `draft_value::String`: The proxy for player draft value: ADP, MinDP, MaxDP
+- `draft_value::String`: The proxy for player draft value: ADP, MinDP, MaxDP, LowDP, HighDP
 - `start_position::Int64`: Starting draft position in round 1
 
 Returns   
@@ -236,7 +240,7 @@ Arguments
 
 Returns   
 
-`roster_df::DataFrame`: Dataframe of only drafted players sorted in ascending draft order
+`roster_df::DataFrame`: DataFrame of only drafted players sorted in ascending draft order
 """
 function get_roster(df::DataFrame, dv::Any, m::Int64)
 
@@ -308,7 +312,7 @@ Arguments
 - `positions::OrderedDict{String, Int64}`: A dictionary of the roster positions and the minimum number of eligible players for each one
 - `strict_goal:: Bool`: Whether or not to force the model to meet the minimum targets
 - `projections::String`, optional: The projection system used: zips, steamer, atc, bat, batx_atc; default is "batx_atc"
-- `draft_value::String`, optional: The proxy for plasyer draft value: ADP, MinDP, MaxDP; default is "ADP"
+- `draft_value::String`, optional: The proxy for plasyer draft value: ADP, MinDP, MaxDP, LowDP, HighDP; default is "ADP"
 - `start_position::Int64`, optional: Starting draft position in round 1; default is 12
 - `print::Bool`, optional: Whether or not to print the roster in draft order to the sceen; default is true
 - `export_arrays::Bool`, optional: Whether or not to return arrays relating to the roster, team statistics, and player positions; default is false
@@ -370,7 +374,7 @@ We know from our previous analysis that we hit all of our targets except on base
 
 * Next, the model selected several relief pitchers, which are the only source of saves and holds. This category is a difficult one to accurately predict, so grabbing someone that projects for a lot of `SOLD`s can generally only be accomplished early in the draft.
 
-* For position players, the model selected what I will call "oatmeal" players. These are generally established veterans who are a known quantity: there is very little upside here. I suspect the model is targeting them because there draft value is not in line with their expected production. This is because these players can be seen as boring.
+* For position players, the model selected what I will call "oatmeal" players. These are generally established veterans who are a known quantity: there is very little upside here. I suspect the model is targeting them because their draft value is not in line with their expected production. This is because these players can be seen as boring.
 """
 
 # ╔═╡ 5b71337e-2b99-4d37-9499-896f079e60ae
@@ -450,19 +454,19 @@ Overall, almost all models place a premium on starters and relievers and end up 
 Here are some thoughts on each system.
 
 ### *ZiPS*
-This is by far the most unique draft the model ended up selecting and what I would consider most similar to a real life draft scenario. The first pick is Elly De La Cruz, an electric power-speed combo bat who had a lot of hype going into the 2024 season. Like some of the other models, the next several picks are all pitchers; however, there are some high celing options, such as Yoshinobu Yamamoto, not present in the others.
+This is by far the most unique draft the model ended up selecting and what I would consider most similar to a real-life draft scenario. The first pick is Elly De La Cruz, an electric power-speed combo bat who had a lot of hype going into the 2024 season. Like some of the other models, the next several picks are all pitchers; however, there are some high-ceiling options, such as Yoshinobu Yamamoto, not present in the others.
 
 Again, we have some players that excel at one category: Kyle Schwarber (`HR`), Esteury Ruiz (`SB`), and Cedric Mullins (`SB`). It seems that there *is* a player profile that *ZiPS* is very bullish on: rookies with top prospect pedigree. This makes up a good portion of the roster, including: Jackson Chourio, Ceddanne Rafaela, Jasson Dominguez, Victor Scott II, and Pete Crow-Armstrong.
 
 ### *Steamer*
-This one has a similar strategy as our base model; however, the pitchers it chooses are different. This is likely because as a projection system with different inputs, the performance it expects of each player can be very different. *Steamer* prefers Kevin Gausman as the top pitcher over Zack Wheeler because Gausman is projected for more strikeouts.
+This one has a similar strategy as our base model; however, the pitchers it chooses are different. This is likely because as a projection system with different inputs, the performance it expects of each player can be very different. *Steamer* prefers Kevin Gausman as the top pitcher over Zack Wheeler because Gausman is projected for more strikeouts in this model.
 
 The base strategy is generally risk adverse; however, the *Steamer* model does select a few players with risk in their profile: Grayson Rodriguez, Mason Miller, Carlos Rodon, and Anthony Rendon. Rodriguez is a second year player who only started to click in the second half of last year, while Rendon and Rodon are both injury risks. Miller is a mix of both, as an injury severely limited his first year in the big leagues in 2023. The model is likely capitalizing on the discrepency between projected player value and actual draft value that comes from perceived issues by the fantasy community.
 
 ### *ATC*
-This model using the same pitching projections as the base model, so the differences on that side are pretty minimal. The first four selections are exactly the same, but curiously, there are some differences in other pitchers. As an example, the *ATC* model selects Logan Gilbert in the fifth round, while the base model takes a reliever. This must be due to hitters that are selected later in the draft, which are a little different than the base model.
+This model uses the same pitching projections as the base model, so the differences on that side are pretty minimal. The first four selections are exactly the same, but curiously, there are some differences in other pitchers. As an example, the *ATC* model selects Logan Gilbert in the fifth round, while the base model takes a reliever. This must be due to hitters that are selected later in the draft, which are a little different than the base model.
 
-This model added a lot of position players that can contribute to more than one category, but generally excel at two: Jonathan India, Jack Suwinski, and Jake Fraley. Interestingy, these players are all taken near the end of the draft, while there are more premium hitters early on that the model passes on in favor in pitching. This tells me that pitching stats are harder to come by, while offensive stats can be made up in the final few rounds.
+This model added a lot of position players that can contribute to more than one category, but generally excel at two: Jonathan India (`HR` & `OBP`), Jack Suwinski (`HR` & `SB`), and Jake Fraley (`HR` & `SB`). Interestingy, these players are all taken near the end of the draft, while there are more premium hitters early on that the model passes on in favor of pitching. This tells me that pitching stats are harder to come by, while offensive stats can be made up in the final few rounds.
 
 ### *THE BAT*
 
@@ -479,7 +483,7 @@ Moving on, let's see how the team stats looks for each model:
 md"""
 It is easy to see where the bottleneck is: clearly wins are hard to come by since no model has more than the minimum target. Wins are difficult to project since they are not entirely driven by individual player performance and can therefore be more random.
 
-Four of the models are pretty similar: base case, *Steamer*, *ATC*, and *THE BAT*. I would say they are all fairly well-balanced teams that tend to favor one or two categories more than the other models. *Steamer* has more `RBI`s and strikeouts. *THE BAT* is weakest in `SOLD`s, but has the most home runs and the lowest `WHIP` of the group. The base model leans toward stolen bases. *ATC* is the most well-rounded I would say. This makes sense since it is an average of the other projection systems (plus others not included).
+Four of the models are pretty similar: base case, *Steamer*, *ATC*, and *THE BAT*. I would say they are all fairly well-balanced teams that tend to favor one or two categories more than the other models. *Steamer* has more `RBI`s and strikeouts. *THE BAT* is weakest in `SOLD`s, but has the most home runs and the lowest `WHIP` of the group. The base model leans toward stolen bases. *ATC* is seemingly the most well-rounded. This makes sense since it is an average of the other projection systems (plus others not included).
 
 *ZiPS* is clearly the outlier here so I want to highlight it. It projects for exactly target home runs, but over 150 more stolen bases and almost double the `SOLD`s compared to the target! These categories can be some of the trickiest to build a team around, so I am surpised with the surplus the model has. It does have the lowest projected strikeouts, but has the best pitching ratios of any model.
 
@@ -490,7 +494,7 @@ Let's also look at the positional eligibility of the rosters:
 
 # ╔═╡ ef7b348e-f4d9-4296-a877-a6e55dbd7faa
 md"""
-All models selected 15 hitters and 10 pitchers. Additionally, some similar themes start to emerge: all rosters have one catcher, and there is a surplus of outfield-eligible players. This makes sense because catchers typically do not offer a ton of value with their bat when compared to other positions, so there is no need to draft more than one. Conversely, the outfield is generally where a lot of the talented hitters end up playing since it requires the least amount of defensive ability (center fielders please forgive me for that generalization!).
+All models selected 15 hitters and 10 pitchers. Additionally, some similar themes start to emerge: all rosters have one catcher, and there is a surplus of outfield-eligible players. This makes sense because catchers typically do not offer a ton of value with their bat when compared to other positions, so there is no need to draft more than one. Conversely, the outfield is generally where a lot of the talented hitters end up playing since it requires the least amount of defensive ability (center fielders--please forgive me for that generalization!).
 """
 
 # ╔═╡ 97ce6cd2-4763-4d0f-99bd-15ad38995c31
@@ -499,13 +503,16 @@ md"""
 
 Next, we will investigate adjusting the draft value of players. This will determine how late a player is available and, therefore, the latest round they can be selected.
 
-By default, we chose to use **A**verage **D**raft **P**osition as a proxy for player value, but how does our model change if we use the latest draft position (which I am calling `MaxDP`)?
+By default, we chose to use **A**verage **D**raft **P**osition (`ADP`) as a proxy for player value, but how does our model change if we use the latest draft position (which I am calling `MaxDP`)? We will also look at a couple other cases: 
+
+* `HighDP` will feature `ADP` values raised by 15 percent
+* `LowDP` will reduce `ADP` by 15 percent
 
 We will modify our helper function to accomplish this.
 """
 
 # ╔═╡ b77c387d-872a-466c-a8c6-427f76494349
-draft_values = ["ADP", "MaxDP"]
+draft_values = ["ADP", "LowDP", "HighDP", "MaxDP"]
 
 # ╔═╡ ce5a4b0a-7bca-48ec-9c02-2e29bd83fd6c
 """
@@ -551,6 +558,13 @@ end
 
 # ╔═╡ e3202458-11ae-40a0-90ce-21d1720b536d
 md"""
+### `LowDP`
+In our previous analysis we noted that there were several "high-risk" players, meaning they were selected very close to their `ADP`. Looking at this first scenario, one of those players did not get drafted at all: Camilo Doval. The other three players were all drafted in earlier rounds. For example, Kyle Schwarber was taken in round 6 instead of round 8. Otherwise, the rosters are very similar, which makes sense given the fact that the base model was selecting players much earlier than their `ADP` in most cases.
+
+### `HighDP`
+This scenario increased the players `ADP` by 15 percent, which allowed the model slightly more flexibilty. In the first round, Shohei Ohtani is now able to be selected. Coming off an MVP season, his bat will surely provide massive boosts to all offensive categories. Also, the `HighDP` model selects one additional pitcher and exchanges one for another, resulting in the additions of Kevin Gausman and Max Fried. This forces the model to take two B-level closers a few rounds later, Andres Munoz and Clay Holmes. The only other difference is that a couple one-dimensional players are drafted in the `HighDP` model: Esteury Ruiz (`SB`) and Christopher Morel (`HR`).
+
+### `MaxDP`
 By increasing the last position that a given player can be drafted, we effectively lowered the value of each player in the draft. An obvious consequence is that the roster we end up with is filled with higher-quality players. Spencer Strider is considered the top fantasy baseball pitcher in 2024, and we are able to draft him in the first round with his reduced cost. Otherwise, a lot of the same pitchers are taken in the draft, just in later rounds.
 
 > **Note:** Unfortunately, Strider had season-ending elbow surgery after his first two starts of the 2024 season. This underscores the importance of incorporating injury risk into models such as this; however, most projection systems do not have this risk fully baked into the numbers.
@@ -559,16 +573,20 @@ An interesting note is that the overall draft strategy in the first four rounds 
 
 Matt Chapman is drafted in almost the exact same position, which implies that he is an exceptional value when using `ADP` as a proxy for market sentiment.
 
-Let's take a look at how the team stat totals look with the new team:
+Let's take a look at how the team stat totals look with the new teams:
 """
 
 # ╔═╡ 107f7761-75f5-4928-b47a-051e82a45e1d
 md"""
-As expected, every single stat remained the same or is improved. Wins stayed the same at 100, which is further evidence that that contraint is really limiting the upside in other categories. Plus, even with the heavy emphasis on starting pitching early in the draft, we are still just barely hitting our targeted win total.
+With the `LowDP` model, most stats are fairly close to the base case other than `SB`, `OBP`, and `SOLD`s. This is not surprising given that both rosters are pretty similar. The drop in `OBP` is likely driven by the final several selections that prioritize power. As an example, Jose Abreu and Eugenio Suarez are boom or bust power guys, while Javier Baez has terrible plate discipline.
+
+The `HighDP` scenario has improved or similar stats in all categories. The standout for me are the pitching ratios `WHIP` and `ERA`, which are better than even the `MaxDP` model. The pitching in this model is truly elite while maintaining strong counting stats. The `MaxDP` model neglects starting pitching early on while `HighDP` takes a premium bat and then goes all-in on starters and relievers for several rounds. This is what is driving that difference.
+
+As expected, every single stat in the `MaxDP` model remained the same or is improved. Wins stayed the same at 100, which is further evidence that that contraint is really limiting the upside in other categories. Plus, even with taking the top pitcher on one of the top teams in the MLB, we are still just barely hitting our targeted win total.
 
 Of course, this scenario is not realistic. A player might be selected near their maximum draft position occasionally, but this would be an unreasonable assumption to make for every player. Indeed, even going off of `ADP`, while better, is still not an entirely reasonable as many players will be taken prior to this number. 
 
-> **Note:** I ran a scenario that used player values based on the first position the player was taken in the draft, `MinDP`, and the MIP was infeasible.
+> **Note:** I ran a scenario that used player values based on the first position the player was taken in the draft, `MinDP`, and the IP was infeasible.
 
 """
 
@@ -654,7 +672,7 @@ end
 md"""
 By punting `SOLD`s, all relievers on the roster are replaced with additional starters or position players. Two additional position players were swapped in for pitchers, while Camilo Doval and Evan Phillips were replaced with Bobby Miller and Logan Gilbert, respectively. Otherwise, the rosters look remarkably similar.
 
-> **Note:** In my real-life fantasy draft, I took Gilbert and Miller in these exact spots.
+> **Note:** In my real-life fantasy draft, I took Gilbert and Miller in these exact spots following a similar strategy.
 
 By punting wins, the roster composition is very different, with around half of the slots being new players. Interestingly, the model chooses to take only two starters and fill the rest of the pitching out with a bounty of premium relievers. This could be an effective strategy since relief pitchers generally have better ratios than starting pitchers. Also, it is no mistake that the model took Kevin Gausman and Blake Snell as the only starters; both of those players are strikeout machines which is something that a roster built entirely of relievers would struggle to accumulate.
 
@@ -667,9 +685,9 @@ Now let's see how the team stat totals compare among the different scenarios:
 md"""
 Punting `SOLD`s provides a benefit to all offensive categories except `OBP`, with very little decrease in strikeouts. `WHIP` is actually improved here, but `ERA` takes a solid hit. This can be attributed to there being no relievers on the roster, who typically have better `ERA`s than starters.
 
-I am surprised that punting wins did not provide more benefit considering that it seems like earlier analyses seemed to indicate that wins were a binding constraint. There is marginal improvement in most all offensive stats except `HR`s. The biggest difference is that a team with this roster will be so strong in `SOLD`s that they are almost guaranteed to win it most weeks. The pitching ratios are also strengths, as `ERA` is reduced drastically. Now it looks like strikeouts is almost a binding constraint, which makes sense given the two starting pitchers it chose.
+I am surprised that punting wins did not provide more benefit considering that it seems like earlier analyses seemed to indicate that wins were a binding constraint. There is marginal improvement in most of all offensive stats except `HR`s. The biggest difference is that a team with this roster will be so strong in `SOLD`s that they are almost guaranteed to win it most weeks. The pitching ratios are also strengths, as `ERA` is reduced drastically. Now it looks like strikeouts is almost a binding constraint, which makes sense given the two starting pitchers it chose.
 
-By punting `SOLD`s and wins, all hitting categories receive a massive boost, at the expense of almost pitching. With the exception of maybe strikeouts, this strategy is essentially punting *all* pitching. By taking starters that excel in generating strikeouts only, `ERA` and `WHIP` are too high to be competitive on a weekly basis. Again, given the roster construction this is not a surpise.
+By punting `SOLD`s and wins, all hitting categories receive a massive boost, at the expense of pitching. With the exception of maybe strikeouts, this strategy is essentially punting *all* pitching. By taking starters that excel in generating strikeouts only, `ERA` and `WHIP` are too high to be competitive on a weekly basis. Again, given the roster construction this is not a surpise.
 
 Based on the above, it seems like punting `SOLD`s is the only viable strategy if you want to remain competitive in the remaining stats.
 """
@@ -732,7 +750,7 @@ end
 
 # ╔═╡ 65c53df3-2b0e-4630-ba90-361482436101
 md"""
-In very rare cases, there is a consensus #1 pick. Coming into the 2024 season, Ronald Acuna Jr. was that player. It comes as no surpise that the *Pick 1* model selects him first overall. He is coming off a a 50 home run, 70 stolen base season! Just his contribution to the team totals will be a massive. Beyond drafting a hitter in the first round, the *Pick 1* model only slightly deviates from the strategy followed by the *Pick 12* model (the base case). Both models target starting pitching and then relief pitching in the first several rounds, and many of the same players make up both teams. Again, this tells me that these players are great values and should be targeted in my real life draft. There are several new players that essentially fill similar functions: Andres Munoz replaces Camilo Doval, Max Fried replaces Zack Wheeler, annd Shea Langaliers replaces Logan O'Hoppe.
+In very rare cases, there is a consensus #1 pick. Coming into the 2024 season, Ronald Acuna Jr. was that player. It comes as no surpise that the *Pick 1* model selects him first overall. He is coming off a a 50 home run, 70 stolen base season! Just his contribution to the team totals will be a massive. Beyond drafting a hitter in the first round, the *Pick 1* model only slightly deviates from the strategy followed by the *Pick 12* model (the base case). Both models target starting pitching and then relief pitching in the first several rounds, and many of the same players make up both teams. Again, this tells me that these players are great values and should be targeted in my real life draft. There are several new players that essentially fill similar functions: Andres Munoz replaces Camilo Doval, Max Fried replaces Zack Wheeler, and Shea Langaliers replaces Logan O'Hoppe.
 
 Looking at the *Pick 6* model, it again opts for a power-speed bat in Fernando Tatis Jr., a player with a similar ceiling to Acuna, but a lower floor. Actually, it makes more sense to compare this one to the *Pick 1* model since there are only **three** players on both rosters that differ. Three! This deserves taking a deeper dive into the differences (or similarities) among these players. 
 
@@ -743,7 +761,7 @@ We can look at this more closely by examining the team category totals for each 
 
 # ╔═╡ da975966-af09-42fe-82b1-b147c9d2a0b0
 md"""
-My reasoning for selecting pick 12 in my real-life draft was that I would rather have two fringe first rounders than have the first overall selection and then have to wait until almost round 3 to have my second pick. It was a decision very much based in intuition, and this data does not necssarily support or reject it. 
+My reasoning for selecting pick 12 in my real-life draft was that I would rather have two fringe first rounders than have the first overall selection and then have to wait until almost round 3 to have my second pick. It was a decision very much based on intuition, and this data does not necessarily support or reject it. 
 
 There are 55 more steals and 35 more runs projected if I would have chose the first pick, but otherwise? Very similar. In fact, the *Pick 12* model has over 50 more strikeouts and 12 more `SOLD`s. This feels like a wash.
 
@@ -866,7 +884,7 @@ stats_bounds
 md"""
 All offensive categories are supercharged, which is heavily driven by Judge and Ramirez. As expected, not drafting any starters is tentamount to punting wins and strikeouts most weeks. Both categories are high enough that it is possible to steal those two categories in some weeks. By having a pitching staff built entirely of relievers, the pitching ratios are elite, so this should be a strong advantage as well.
 
-The *Relaxed* model is less balanced, but not to the extreme that I anticipated. The roster is very strong in eight categories, which most weeks should be enough to win the matchup. I do think this fantasy team could make the playoffs, the question becomes how deep they could go. You are essentially giving the other team two points, so would really need to have the advantage in all others to have a chance.
+The *Relaxed* model is less balanced, but not to the extreme that I anticipated. The roster is very strong in eight categories, which most weeks should be enough to win the matchup. I do think this fantasy team could make the playoffs, the question becomes how deep they could go. You are essentially giving the other team two points, so you would really need to have the advantage in all others to have a chance.
 
 As an aside, I do wonder what effect drafting the *Relaxed* model's roster would have on the league as a whole. You would essentially be hording all of the top-end relief pitchers, which would leave others with little alternatives. In the real world, other teams would be forced to adjust their draft strategy live to deal with the substantial changes you are making. Put another way, it is unlikely you would actually be able to draft all of these relievers. Generally, when one reliever goes early, it prompts someone soon after to select a relief pitcher as well. This can snowball into a run on relief pitchers due to the perception that they might be gone sooner than normal. By the time it is your turn to make another pick, some of the guys you wanted might not be there anymore.
 
