@@ -447,7 +447,7 @@ end
 
 # ╔═╡ 095f7ad1-8e74-4f2c-954a-7db24133680a
 md"""
-Interestingly, there is a lot of commonality between the five different projections! The two most different rosters are the ones sourced from the *ZiPS* and *Steamer* projections.
+Interestingly, there is a lot of commonalities between the five different projections! The two most different rosters are the ones sourced from the *ZiPS* and *Steamer* projections.
 
 Overall, almost all models place a premium on starters and relievers and end up taking batters in the middle to late rounds. Also, a lot of those hitters end up being one-category players. An example is Esteury Ruiz, who offers a ton of speed, and therefore stolen base potential, but not much else.
 
@@ -485,7 +485,7 @@ It is easy to see where the bottleneck is: clearly wins are hard to come by sinc
 
 Four of the models are pretty similar: base case, *Steamer*, *ATC*, and *THE BAT*. I would say they are all fairly well-balanced teams that tend to favor one or two categories more than the other models. *Steamer* has more `RBI`s and strikeouts. *THE BAT* is weakest in `SOLD`s, but has the most home runs and the lowest `WHIP` of the group. The base model leans toward stolen bases. *ATC* is seemingly the most well-rounded. This makes sense since it is an average of the other projection systems (plus others not included).
 
-*ZiPS* is clearly the outlier here so I want to highlight it. It projects for exactly target home runs, but over 150 more stolen bases and almost double the `SOLD`s compared to the target! These categories can be some of the trickiest to build a team around, so I am surpised with the surplus the model has. It does have the lowest projected strikeouts, but has the best pitching ratios of any model.
+*ZiPS* is clearly the outlier here so I want to highlight it. It projects for exactly target home runs, but over 150 more stolen bases and almost double the `SOLD`s compared to the target! These categories can be some of the trickiest to build a team around, so I am surprised with the surplus the model has. It does have the lowest projected strikeouts, but has the best pitching ratios of any model.
 
 Why is this model's roster so different? Well, it comes down to how the projections are built. *ZiPS* is based off of simulated seasons, while the other models are some form of regression. This allows *ZiPS* to factor in more upside, which is why the model selected so many young players. They have the potential to explode.
 
@@ -687,7 +687,7 @@ Punting `SOLD`s provides a benefit to all offensive categories except `OBP`, wit
 
 I am surprised that punting wins did not provide more benefit considering that it seems like earlier analyses seemed to indicate that wins were a binding constraint. There is marginal improvement in most of all offensive stats except `HR`s. The biggest difference is that a team with this roster will be so strong in `SOLD`s that they are almost guaranteed to win it most weeks. The pitching ratios are also strengths, as `ERA` is reduced drastically. Now it looks like strikeouts is almost a binding constraint, which makes sense given the two starting pitchers it chose.
 
-By punting `SOLD`s and wins, all hitting categories receive a massive boost, at the expense of pitching. With the exception of maybe strikeouts, this strategy is essentially punting *all* pitching. By taking starters that excel in generating strikeouts only, `ERA` and `WHIP` are too high to be competitive on a weekly basis. Again, given the roster construction this is not a surpise.
+By punting `SOLD`s and wins, all hitting categories receive a massive boost, at the expense of pitching. With the exception of maybe strikeouts, this strategy is essentially punting *all* pitching. By taking starters that excel in generating strikeouts only, `ERA` and `WHIP` are too high to be competitive on a weekly basis. Again, given the roster construction this is not a surprise.
 
 Based on the above, it seems like punting `SOLD`s is the only viable strategy if you want to remain competitive in the remaining stats.
 """
@@ -750,7 +750,7 @@ end
 
 # ╔═╡ 65c53df3-2b0e-4630-ba90-361482436101
 md"""
-In very rare cases, there is a consensus #1 pick. Coming into the 2024 season, Ronald Acuna Jr. was that player. It comes as no surpise that the *Pick 1* model selects him first overall. He is coming off a a 50 home run, 70 stolen base season! Just his contribution to the team totals will be a massive. Beyond drafting a hitter in the first round, the *Pick 1* model only slightly deviates from the strategy followed by the *Pick 12* model (the base case). Both models target starting pitching and then relief pitching in the first several rounds, and many of the same players make up both teams. Again, this tells me that these players are great values and should be targeted in my real life draft. There are several new players that essentially fill similar functions: Andres Munoz replaces Camilo Doval, Max Fried replaces Zack Wheeler, and Shea Langaliers replaces Logan O'Hoppe.
+In very rare cases, there is a consensus #1 pick. Coming into the 2024 season, Ronald Acuna Jr. was that player. It comes as no surprise that the *Pick 1* model selects him first overall. He is coming off a 50-home run, 70-stolen base season! Just his contribution to the team totals will be massive. Beyond drafting a hitter in the first round, the *Pick 1* model only slightly deviates from the strategy followed by the *Pick 12* model (the base case). Both models target starting pitching and then relief pitching in the first several rounds, and many of the same players make up both teams. Again, this tells me that these players are great values and should be targeted in my real life draft. There are several new players that essentially fill similar functions: Andres Munoz replaces Camilo Doval, Max Fried replaces Zack Wheeler, and Shea Langaliers replaces Logan O'Hoppe.
 
 Looking at the *Pick 6* model, it again opts for a power-speed bat in Fernando Tatis Jr., a player with a similar ceiling to Acuna, but a lower floor. Actually, it makes more sense to compare this one to the *Pick 1* model since there are only **three** players on both rosters that differ. Three! This deserves taking a deeper dive into the differences (or similarities) among these players. 
 
@@ -870,7 +870,7 @@ roster_bounds
 
 # ╔═╡ 6e53fa35-0d5e-42cd-919e-03d6a894dd66
 md"""
-The strategy that the model chooses is very interesting: do not draft any starting pitchers. This is not surpising given the fact that wins are difficult to come by, as we have not seen *any* permutation of this model have a win total above the 100 win threshold. 
+The strategy that the model chooses is very interesting: do not draft any starting pitchers. This is not surprising given the fact that wins are difficult to come by, as we have not seen *any* permutation of this model have a win total above the 100-win threshold. 
 
 The *Relaxed* model opts to take two premium bats in the first couple rounds: Aaron Judge and Jose Ramirez. Both are balanced hitters that have a good amount of pop. Ramirez projects for about 30 steals as well. Since starters are not valued here,  the model takes two of the best relievers in the whole draft: Edwin Diaz and Josh Hader. These guys have big strikeout upside and a proven track record of success. The second half of the draft looks remarkably similar to the *Strict* model though.
 
@@ -882,7 +882,7 @@ stats_bounds
 
 # ╔═╡ fd56a380-dfa7-4eab-a6cb-c8438eb2bdf9
 md"""
-All offensive categories are supercharged, which is heavily driven by Judge and Ramirez. As expected, not drafting any starters is tentamount to punting wins and strikeouts most weeks. Both categories are high enough that it is possible to steal those two categories in some weeks. By having a pitching staff built entirely of relievers, the pitching ratios are elite, so this should be a strong advantage as well.
+All offensive categories are supercharged, which is heavily driven by Judge and Ramirez. As expected, not drafting any starters is tantamount to punting wins and strikeouts most weeks. Both categories are high enough that it is possible to steal those two categories in some weeks. By having a pitching staff built entirely of relievers, the pitching ratios are elite, so this should be a strong advantage as well.
 
 The *Relaxed* model is less balanced, but not to the extreme that I anticipated. The roster is very strong in eight categories, which most weeks should be enough to win the matchup. I do think this fantasy team could make the playoffs, the question becomes how deep they could go. You are essentially giving the other team two points, so you would really need to have the advantage in all others to have a chance.
 
