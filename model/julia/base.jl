@@ -181,6 +181,8 @@ md"""
 The decision the model needs to make is pretty simple: what player should I select in each round of the draft? In practice, this is a single variable with two indexes, `i` and `j`.
 
 > **Important Note:** The decision variable is binary!
+
+$x_{ij} \in \{0, 1\}, for\ i=1-579,\ j=1-25$
 """
 
 # ╔═╡ 4f6ceaac-e93e-480d-a37e-595e53f6cf83
@@ -195,7 +197,7 @@ md"""
 We need to build some expressions that relate to the objective function. There will be one term for each statistical category of the following form:
 
 $\frac{\sum_{i=1}^{579}\sum_{j=1}^{25}{c_{ik}x_{ij}}- target_{k}}
-{target_{k}},$
+{target_{k}} = obj_{k},$
 $for\ k=HR,\ R,\ RBI,\ SB,\ OBP,\ W,\ SOLD,\ SO,\ WHIP,\ ERA$
 
 The subobjectives are formulated this way to normalize the scale of each statistical category, some are in the thousands and others can be less than 100.
@@ -212,7 +214,7 @@ md"""
 
 With the above expression created, the objective function is fairly straightword:
 
-$max \ z = \sum_{k=1}^{10}{w_{k} obj_{k}}$
+$max \ z = \sum_{k}{w_{k} obj_{k}}$
 
 We defined the weights earlier, which are simply +1 for categories we seek to maximize and -1 for those week seek to minimize.
 """

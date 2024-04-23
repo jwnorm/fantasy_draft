@@ -176,13 +176,13 @@ function solve_model(targets::OrderedDict{String, Real},
 	@constraint(model, 
 				player_max[i ∈ df[:, :player]], 
 				sum(x[i, :]) <= 1)
+	
+	@constraint(model, 
+				adp_odd_max[j ∈ 1:2:m], 
+				sum(df[i, draft_value] * x[df[i, :player], j] 
+				for i=1:n) >= teams * (j - 1) + start_position)
 
 	if start_position == 1
-		@constraint(model, 
-					adp_odd_max[j ∈ 1:2:m], 
-					sum(df[i, draft_value] * x[df[i, :player], j] 
-					for i=1:n) >= teams * (j - 1) + start_position)
-		
 		@constraint(model, 
 					adp_even_max[j ∈ 2:2:m], 
 					sum(df[i, draft_value] * x[df[i, :player], j] 
@@ -190,21 +190,11 @@ function solve_model(targets::OrderedDict{String, Real},
 		
 	elseif start_position == 6 
 		@constraint(model, 
-					adp_odd_max[j ∈ 1:2:m], 
-					sum(df[i, draft_value] * x[df[i, :player], j] 
-					for i=1:n) >= teams * (j - 1) + start_position)
-
-		@constraint(model, 
 					adp_even_max[j ∈ 2:2:m], 
 					sum(df[i, draft_value] * x[df[i, :player], j] 
 					for i=1:n) >= teams * (j - 1) + start_position + 1)
 
-	elseif start_position == 12
-		@constraint(model, 
-					adp_odd_max[j ∈ 1:2:m], 
-					sum(df[i, draft_value] * x[df[i, :player], j] 
-					for i=1:n) >= teams * (j - 1) + start_position)
-		
+	elseif start_position == 12	
 		@constraint(model, 
 					adp_even_max[j ∈ 2:2:m], 
 					sum(df[i, draft_value] * x[df[i, :player], j] 
