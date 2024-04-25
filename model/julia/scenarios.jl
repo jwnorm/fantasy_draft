@@ -17,7 +17,7 @@ md"""
 md"""
 ## Introduction
 
-This report will build on the previous analysis that established a base optimal fantasy baseball roster and analyze the effects that altering different inputs have on the result.
+This report will build on the [prior analysis](https://github.com/jwnorm/fantasy_draft/blob/main/model/julia/base.html) that established a base optimal fantasy baseball roster and analyze the effects that altering different inputs have on the result.
 
 Here are broad areas where we will investigate changes:
 
@@ -302,7 +302,7 @@ Arguments
 - `positions::OrderedDict{String, Int64}`: A dictionary of the roster positions and the minimum number of eligible players for each one
 - `strict_goal:: Bool`: Whether or not to force the model to meet the minimum targets
 - `projections::String`, optional: The projection system used: zips, steamer, atc, bat, batx_atc; default is "batx_atc"
-- `draft_value::String`, optional: The proxy for plasyer draft value: ADP, MinDP, MaxDP, LowDP, HighDP; default is "ADP"
+- `draft_value::String`, optional: The proxy for player draft value: ADP, MinDP, MaxDP, LowDP, HighDP; default is "ADP"
 - `start_position::Int64`, optional: Starting draft position in round 1; default is 12
 - `print::Bool`, optional: Whether or not to print the roster in draft order to the sceen; default is true
 - `export_arrays::Bool`, optional: Whether or not to return arrays relating to the roster, team statistics, and player positions; default is false
@@ -356,7 +356,7 @@ fantasy_draft(targets, position_min)
 
 # ╔═╡ d7da5063-6824-4b79-a3af-3d25dfe5f4ea
 md"""
-**When I reference the base model throughout this report, this is the cohort of players it corresponds to.**
+> **Important Note:** When I reference the base model throughout this report, this is the cohort of players it corresponds to.
 
 We know from our previous analysis that we hit all of our targets except on base percentage. Some other interesting notes on this roster:
 
@@ -380,7 +380,7 @@ Now let's see how the projection system used impacts the final roster and the ov
 
 Since the objective function and related expressions are heavily dependent on the projection system used, I suspect the rosters will vary wildly.
 
-To help our analysis, we will need a helper function. There are several scenarios we would like to work through, so we can take advantage of Julia's *multiple dispatch* capabilities to create one function that does slightly different things depending on the types of the input parameters.
+To facilitate our analysis, we will need a helper function. There are several scenarios we would like to work through, so we can take advantage of Julia's *multiple dispatch* capabilities to create one function that does slightly different things depending on the types of the input parameters.
 """
 
 # ╔═╡ ef26e745-741f-4d93-a5df-e9cf84966cfb
@@ -437,7 +437,7 @@ end
 
 # ╔═╡ 095f7ad1-8e74-4f2c-954a-7db24133680a
 md"""
-Interestingly, there is a lot of commonalities between the five different projections! The two most different rosters are the ones sourced from the *ZiPS* and *Steamer* projections.
+Interestingly, there are numerous commonalities between the five different projections! The two most different rosters are the ones sourced from the *ZiPS* and *Steamer* projections.
 
 Overall, almost all models place a premium on starters and relievers and end up taking batters in the middle to late rounds. Also, a lot of those hitters end up being one-category players. An example is Esteury Ruiz, who offers a ton of speed, and therefore stolen base potential, but not much else.
 
@@ -454,9 +454,9 @@ This one has a similar strategy as our base model; however, the pitchers it choo
 The base strategy is generally risk adverse; however, the *Steamer* model does select a few players with risk in their profile: Grayson Rodriguez, Mason Miller, Carlos Rodon, and Anthony Rendon. Rodriguez is a second year player who only started to click in the second half of last year, while Rendon and Rodon are both injury risks. Miller is a mix of both, as an injury severely limited his first year in the big leagues in 2023. The model is likely capitalizing on the discrepency between projected player value and actual draft value that comes from perceived issues by the fantasy community.
 
 ### *ATC*
-This model uses the same pitching projections as the base model, so the differences on that side are pretty minimal. The first four selections are exactly the same, but curiously, there are some differences in other pitchers. As an example, the *ATC* model selects Logan Gilbert in the fifth round, while the base model takes a reliever. This must be due to hitters that are selected later in the draft, which are a little different than the base model.
+This model uses the same pitching projections as the base model, so the differences on that side are pretty minimal. The first four selections are exactly the same, but curiously, there are some differences in other pitchers. As an example, the *ATC* model selects Logan Gilbert in the fifth round, while the base model takes a reliever. This must be due to the influence of hitters that are selected later in the draft, which are a little different than the base model.
 
-This model added a lot of position players that can contribute to more than one category, but generally excel at two: Jonathan India (`HR` & `OBP`), Jack Suwinski (`HR` & `SB`), and Jake Fraley (`HR` & `SB`). Interestingy, these players are all taken near the end of the draft, while there are more premium hitters early on that the model passes on in favor of pitching. This tells me that pitching stats are harder to come by, while offensive stats can be made up in the final few rounds.
+This model added a lot of position players that can contribute to more than one category, but generally excel at two: Jonathan India (`HR` & `OBP`), Jack Suwinski (`HR` & `SB`), and Jake Fraley (`HR` & `SB`). Interestingly, these players are all taken near the end of the draft, while there are more premium hitters early on that the model passes on in favor of pitching. This tells me that pitching stats are harder to come by, while offensive stats can be made up in the final few rounds.
 
 ### *THE BAT*
 
@@ -549,7 +549,7 @@ end
 # ╔═╡ e3202458-11ae-40a0-90ce-21d1720b536d
 md"""
 ### `LowDP`
-In our previous analysis we noted that there were several "high-risk" players, meaning they were selected very close to their `ADP`. Looking at this first scenario, one of those players did not get drafted at all: Camilo Doval. The other three players were all drafted in earlier rounds. For example, Kyle Schwarber was taken in round 6 instead of round 8. Otherwise, the rosters are very similar, which makes sense given the fact that the base model was selecting players much earlier than their `ADP` in most cases.
+In our previous analysis we noted that there were several high-risk players, meaning they were selected very close to their `ADP`. Looking at this first scenario, one of those players did not get drafted at all: Camilo Doval. The other three players were all drafted in earlier rounds. For example, Kyle Schwarber was taken in round 6 instead of round 8. Otherwise, the rosters are very similar, which makes sense given the fact that the base model was selecting players much earlier than their `ADP` in most cases.
 
 ### `HighDP`
 This scenario increased the players `ADP` by 15 percent, which allowed the model slightly more flexibilty. In the first round, Shohei Ohtani is now able to be selected. Coming off an MVP season, his bat will surely provide massive boosts to all offensive categories. Also, the `HighDP` model selects one additional pitcher and exchanges one for another, resulting in the additions of Kevin Gausman and Max Fried. This forces the model to take two B-level closers a few rounds later, Andres Munoz and Clay Holmes. The only other difference is that a couple one-dimensional players are drafted in the `HighDP` model: Esteury Ruiz (`SB`) and Christopher Morel (`HR`).
@@ -572,7 +572,7 @@ With the `LowDP` model, most stats are fairly close to the base case other than 
 
 The `HighDP` scenario has improved or similar stats in all categories. The standout for me are the pitching ratios `WHIP` and `ERA`, which are better than even the `MaxDP` model. The pitching in this model is truly elite while maintaining strong counting stats. The `MaxDP` model neglects starting pitching early on while `HighDP` takes a premium bat and then goes all-in on starters and relievers for several rounds. This is what is driving that difference.
 
-As expected, every single stat in the `MaxDP` model remained the same or is improved. Wins stayed the same at 100, which is further evidence that that contraint is really limiting the upside in other categories. Plus, even with taking the top pitcher on one of the top teams in the MLB, we are still just barely hitting our targeted win total.
+As expected, every single stat in the `MaxDP` model remained the same or is improved. Wins stayed the same at 100, which is further evidence that that contsraint is really limiting the upside in other categories. Plus, even with taking the top pitcher on one of the top teams in the MLB, we are still just barely hitting our targeted win total.
 
 Of course, this scenario is not realistic. A player might be selected near their maximum draft position occasionally, but this would be an unreasonable assumption to make for every player. Indeed, even going off of `ADP`, while better, is still not an entirely reasonable as many players will be taken prior to this number. 
 
@@ -755,7 +755,7 @@ My reasoning for selecting pick 12 in my real-life draft was that I would rather
 
 There are 55 more steals and 35 more runs projected if I would have chose the first pick, but otherwise? Very similar. In fact, the *Pick 12* model has over 50 more strikeouts and 12 more `SOLD`s. This feels like a wash.
 
-As we might have guessed, the *Pick 1* and the *Pick 6* model have almost the same projected end of season statistics. The only glaring exception is steals, which is 16 stolen bases lower because it does not have Acuna. 
+As we might have guessed, the *Pick 1* and the *Pick 6* model have almost the same projected end of season statistics. The only glaring exception is steals, which is 16 stolen bases lower in the *Pick 6* model because it does not have Acuna. 
 
 Overall, it is not clear what the best strategy is based off of starting draft position. Besides having Acuna, the rosters are built very similarly and have more or less the same projected stats. The snake-like nature of the draft is meant to level the playing field amongst all teams, and despite my prediction, it appears to do a reasonably good job at it.
 """

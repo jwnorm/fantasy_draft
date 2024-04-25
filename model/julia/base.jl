@@ -45,7 +45,7 @@ First, let's load the required packages:
 
 # ╔═╡ 46e54092-e74c-4d2c-853a-59a0489667ba
 md"""
-The `HiGHS.jl` library is an open source solver that is great for mixed-integer LPs. This is exactly what I need, because I first wrote this model in GAMS, but ran into trouble with the limit on decision variables that came with the academic license.
+The `HiGHS.jl` library is an open-source solver that is great for mixed-integer LPs. This is exactly what I need, because I first wrote this model in GAMS, but ran into trouble with the limit on decision variables that came with the academic license.
 
 
 Next, we will read in the DataFrame:
@@ -94,8 +94,8 @@ md"""
 ## Sets
 
 The two primary sets are as follows:
-* `i` => player name (team)
-* `j` => round in draft
+* `i` --> player name (team)
+* `j` --> round in draft
 """
 
 # ╔═╡ d5dc21ba-f8f7-490f-91fa-fc549d2f9aec
@@ -108,7 +108,7 @@ end
 md"""
 I had to include the team the player currently belongs to as part of the player ID, since there were a few players that had the same first and last names, such as Will Smith and Logan Allen. 
 
-With that in mind, the are $n unique players and $m rounds in the draft. For mathematical formulations, we will just use the players index out of the $n for convenience. This means that we will have $(n * m) decision variables!
+With that in mind, there are $n unique players and $m rounds in the draft. For mathematical formulations, we will just use the player's index out of $n for convenience. This means that we will have $(n * m) decision variables!
 """
 
 # ╔═╡ 334c0497-e812-43ac-bbcc-63c3fa5c3b87
@@ -143,7 +143,7 @@ targets = OrderedDict("HR" => 275,
 
 # ╔═╡ 96b7d9be-0013-4f9d-a300-6e319789f7fe
 md"""
-> **Important Note:** While most of the categories are counting stats (can only take integer values), there are three measures that are ratios: `OBP`, `WHIP`, and `ERA`. To keep the model linear, I will look to maximize the sum and not the average as I would like. To accomplish this, I needed to approximate a target ratio for each stat, which meant I needed to guess the number of hitters and pitchers that will be on my model roster. This is not a perfect solution, but it will keep everything linear.
+> **Important Note:** While most of the categories are counting stats (can only take integer values), there are three measures that are ratios: `OBP`, `WHIP`, and `ERA`. To keep the model linear, I needed to maximize the sum and not the average as I would have liked. To accomplish this, I needed to approximate a target ratio for each stat, which meant I needed to guess the number of hitters and pitchers that will be on my final model roster. This is not a perfect solution, but it will keep everything linear.
 """
 
 # ╔═╡ e243dd01-d94f-48ab-bf5a-a9077e62c2ba
@@ -200,7 +200,7 @@ $\frac{\sum_{i=1}^{579}\sum_{j=1}^{25}{c_{ik}x_{ij}}- target_{k}}
 {target_{k}} = obj_{k},$
 $for\ k=HR,\ R,\ RBI,\ SB,\ OBP,\ W,\ SOLD,\ SO,\ WHIP,\ ERA$
 
-The subobjectives are formulated this way to normalize the scale of each statistical category, some are in the thousands and others can be less than 100.
+The subobjectives are formulated this way to normalize the scale of each statistical category; some are in the thousands and others can be less than 100.
 """
 
 # ╔═╡ 6e00d682-8c4e-4250-a6e5-d4383e7caae6
@@ -216,7 +216,7 @@ With the above expression created, the objective function is fairly straightword
 
 $max \ z = \sum_{k}{w_{k} obj_{k}}$
 
-We defined the weights earlier, which are simply +1 for categories we seek to maximize and -1 for those week seek to minimize.
+We defined the weights earlier, which are simply +1 for categories we seek to maximize and -1 for those we would like to minimize.
 """
 
 # ╔═╡ 258ffcba-e4f2-483f-8173-53e3051af4cd
@@ -309,7 +309,7 @@ Lastly, we need to add non-negativity constraints for the categories we want to 
 
 We *could* keep these values as free variables, but I would like to at least hit the target on all of the categories. The reason being that winning categories is binary, so we just need to do enough to win and not much more. Otherwise, other categories could be compromised.
 
-As a reminder, we could like `WHIP` and `ERA` to be as small as possible, and would like to maximize all other stats.
+As a reminder, we would like `WHIP` and `ERA` to be as small as possible, and would like to maximize all other stats.
 """
 
 # ╔═╡ 6e59a964-ea5c-4159-b4d2-99d514ab033f
@@ -459,7 +459,7 @@ show(select(drafted_players_df, [:Pick, :ADP, :player]), allrows=true)
 
 # ╔═╡ 242b7a0f-3c88-45f6-a23a-97f22f48e3d5
 md"""
-We can confirm that no player was selected with a pick that was after their `ADP`. The majority of the players are actually selected well before their `ADP`. This is especially true in the first two rounds with Zack Wheeler and Luis Castillo. I would be confident that these players would be available when the model chose to select them; however, there are others that I would deem "high-risk" selections. These players were taken very close to their `ADP`:
+We can confirm that no player was selected with a pick that was after their `ADP`. The majority of the players are actually selected well before their `ADP`. This is especially true in the first two rounds with Zack Wheeler and Luis Castillo. I would be confident that these players would be available when the model chose to select them; however, there are others that I would deem high-risk selections. These players were taken very close to their `ADP`:
 
 * Camilo Doval
 * Kyle Schwarber
@@ -472,7 +472,7 @@ It is highly probable that some of these players will be selected prior to when 
 # ╔═╡ a97621b8-2cbf-45bf-a4f0-52c28539159f
 md"""
 ## Next Steps
-In the next analysis, we will walk through how different scenarios impact the optimal fantasy baseball draft we just solved above.
+In the [next analysis](https://github.com/jwnorm/fantasy_draft/blob/main/model/julia/scenario.html), we will walk through how different scenarios impact the optimal fantasy baseball draft we just solved above.
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
