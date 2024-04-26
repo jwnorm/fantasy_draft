@@ -472,7 +472,7 @@ It is highly probable that some of these players will be selected prior to when 
 # ╔═╡ a97621b8-2cbf-45bf-a4f0-52c28539159f
 md"""
 ## Next Steps
-In the [next analysis](https://github.com/jwnorm/fantasy_draft/blob/main/model/julia/scenario.html), we will walk through how different scenarios impact the optimal fantasy baseball draft we just solved above.
+In the [next analysis](https://github.com/jwnorm/fantasy_draft/blob/main/model/julia/scenarios.html), we will walk through how different scenarios impact the optimal fantasy baseball draft we just solved above.
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
