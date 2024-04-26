@@ -34,7 +34,7 @@ md"""
 
 Before we actually start to build the model, let's read in the data that this will be based on. The projections are courtesy of [Fangraphs](https://www.fangraphs.com). The hitters are using *THE BAT X* projections, while pitchers projections are based off *ATC*. 
 
-I chose *THE BAT X* as my favored source of projections because they are leveraging Statcast data. These are process-oriented metrics that include, but are not limited to: average launch angle, average exit velocity, and hard hit rate. In other words, these capture the hitter's approach to predict their future statistics, not just their past outcomes alone.
+I chose *THE BAT X* as my favored source of projections because they are leveraging Statcast data. These are process-oriented metrics that include, but are not limited to: average launch angle, average exit velocity, and hard hit rate. In other words, these capture the hitter's underlying approach to predict their future statistics, not just their past outcomes alone.
 
 Normally, I would like the projections of both the hitters and the pitchers to be from the same source; however, *THE BAT X* only projects for hitters at present, so I opted to use the *ATC* projections for pitchers. *ATC* stands for **A**verage **T**otal **C**ost and, as its name suggests, it averages the projections of several different sources.
 
@@ -56,7 +56,7 @@ df = DataFrame(CSV.File("../../data/batx_atc.csv"))
 
 # ╔═╡ 0712c423-262c-46e7-b996-2be27e79d669
 md"""
-The format of the fantasy baseball league is 5x5 categories, which means that we track 5 different statistical categories each for hitters and pitchers.
+The format of the fantasy baseball league is 5x5 roto, which means that we track five different statistical categories each for hitters and pitchers.
 
 For hitters:
 * **H**ome **R**uns (`HR`)
@@ -106,9 +106,9 @@ end
 
 # ╔═╡ efdfd4d2-596c-44d9-978b-4d2e541d35b5
 md"""
-I had to include the team the player currently belongs to as part of the player ID, since there were a few players that had the same first and last names, such as Will Smith and Logan Allen. 
+I had to include the team the player currently belongs to as part of the player ID, since there are two players that had the same first and last names, Will Smith and Logan Allen. 
 
-With that in mind, there are $n unique players and $m rounds in the draft. For mathematical formulations, we will just use the player's index out of $n for convenience. This means that we will have $(n * m) decision variables!
+With that in mind, there are $n unique players and $m rounds in the draft. For mathematical formulations, we will just use the player's index out of $n. This means that we will have $(n * m) decision variables!
 """
 
 # ╔═╡ 334c0497-e812-43ac-bbcc-63c3fa5c3b87
@@ -121,7 +121,7 @@ Let's define parameters that will be used in the model, starting with some leagu
 # ╔═╡ ea49bdfa-a22b-4156-a664-ed7dc2a3f5f4
 begin
 	teams = 12 			 # number of teams in fantasy league
-	start_position = 12  # starting draft position in round 1
+	start_position = 12  # starting draft position in round one
 end
 
 # ╔═╡ e5ebadec-b2f2-4fa5-8666-d56e8346bb39
@@ -196,11 +196,11 @@ md"""
 
 We need to build some expressions that relate to the objective function. There will be one term for each statistical category of the following form:
 
-$\frac{\sum_{i=1}^{579}\sum_{j=1}^{25}{c_{ik}x_{ij}}- target_{k}}
+$\frac{\sum_{i=1}^{579}\sum_{j=1}^{25}{proj_{ik}x_{ij}} - target_{k}}
 {target_{k}} = obj_{k},$
 $for\ k=HR,\ R,\ RBI,\ SB,\ OBP,\ W,\ SOLD,\ SO,\ WHIP,\ ERA$
 
-The subobjectives are formulated this way to normalize the scale of each statistical category; some are in the thousands and others can be less than 100.
+The subobjectives are formulated this way to normalize the scale of each statistical category; some are in the thousands while others can be less than 10.
 """
 
 # ╔═╡ 6e00d682-8c4e-4250-a6e5-d4383e7caae6
@@ -307,7 +307,7 @@ $\sum_{i=1}^{579}\sum_{j=1}^{25}{Pos_{ip}x_{ij}} ≥ MinPos_{p},\ for\ p=C,\ 1B,
 md"""
 Lastly, we need to add non-negativity constraints for the categories we want to maximize and non-positivity constraints for those we want to minimize. The bounds of $x_{ij}$ are already accounted for since we defined it as a binary variable, but we need to still do this for $obj_{k}$.
 
-We *could* keep these values as free variables, but I would like to at least hit the target on all of the categories. The reason being that winning categories is binary, so we just need to do enough to win and not much more. Otherwise, other categories could be compromised.
+We *could* keep these values as free variables, but I would like to at least hit the target on all of the categories. The reason being the outcome of each category is win, lose, or tie; there are no additional points for winning by a large margin. Otherwise, other categories could be compromised.
 
 As a reminder, we would like `WHIP` and `ERA` to be as small as possible, and would like to maximize all other stats.
 """
@@ -416,9 +416,9 @@ end
 
 # ╔═╡ 98a2dc95-43fc-4ae4-81fb-44d2273d8d30
 md"""
-Almost all of our objectives have been satisfied. `OBP` is a little below target, but this is because of the adjustment we had to make to our targets to keep the model linear. Both pitching ratios actually beat the target set for them, so in that case our approximation worked.
+Almost all of our objectives have been satisfied. `OBP` is a little below target, but this is because of the adjustment we had to make to our targets to keep the model linear. Both pitching ratios actually beat the target set for them, so in those cases our approximation worked.
 
-It looks like `HR` and `SO` are two categories with a strong surplus. At least for strikeouts, this makes sense based on the emphasis on starting pitching in the early draft rounds. The power is made up in later draft rounds, which suggests you can wait on power and still find value.
+It looks like `SB` and `SO` are two categories with a strong surplus. For strikeouts, this makes sense based on the emphasis on starting pitching in the early draft rounds. Most of the offensive players drafted have non-zero speed, so the model seemed to prioritize that player profile throughout the draft.
 
 We can see that a player was selected in every round and no two players were selected twice, but let's double check that the positional requirements have been met:
 """
@@ -459,7 +459,7 @@ show(select(drafted_players_df, [:Pick, :ADP, :player]), allrows=true)
 
 # ╔═╡ 242b7a0f-3c88-45f6-a23a-97f22f48e3d5
 md"""
-We can confirm that no player was selected with a pick that was after their `ADP`. The majority of the players are actually selected well before their `ADP`. This is especially true in the first two rounds with Zack Wheeler and Luis Castillo. I would be confident that these players would be available when the model chose to select them; however, there are others that I would deem high-risk selections. These players were taken very close to their `ADP`:
+We can confirm that no player was selected with a pick that was after their `ADP`. The majority of the players are actually selected well before their `ADP`. This is especially true in the first two rounds with Zack Wheeler and Luis Castillo. I am confident that these players would be available when the model chose to select them; however, there are others that I would deem high-risk selections. These players were taken very close to their `ADP`:
 
 * Camilo Doval
 * Kyle Schwarber
